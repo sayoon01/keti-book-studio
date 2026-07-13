@@ -20,6 +20,7 @@ from backend.storage.models import (
     SourceDocument,
 )
 from backend.storage.recalculation import assert_outline_editable, recalc_config_from_outline
+from backend.storage.versioning import log_version
 
 router = APIRouter(prefix="/api/outlines/{outline_id}/units", tags=["units"])
 
@@ -78,7 +79,10 @@ def update_unit(
 
     assert_outline_editable(outline)
 
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    changed_fields = payload.model_dump(exclude_unset=True)
+    before = {field: getattr(unit, field) for field in changed_fields}
+
+    for field, value in changed_fields.items():
         setattr(unit, field, value)
 
     session.add(unit)
@@ -87,6 +91,14 @@ def update_unit(
     session.refresh(unit)
 
     recalc_config_from_outline(session, outline.book_id)
+
+    if changed_fields:
+        log_version(
+            session, outline.book_id, "unit", unit_id,
+            {"before": before, "after": changed_fields},
+            label=f"챕터 수정: {unit.title}",
+        )
+        session.refresh(unit)
     return unit
 
 
@@ -147,7 +159,6 @@ def generate_unit_body(
     reviewer_llm=Depends(get_reviewer_llm_call),
     reviser_llm=Depends(get_reviser_llm_call),
 ):
-    """챕터 본문 생성: Writer -> Reviewer -> (필요시) Reviser."""
     outline = _get_outline_or_404(session, outline_id)
     unit = _get_unit_or_404(session, unit_id)
     if unit.outline_id != outline_id:
@@ -170,6 +181,8 @@ def generate_unit_body(
     evidence_chunks = _collect_evidence_chunks(session, outline.book_id, unit)
     if not evidence_chunks:
         raise HTTPException(400, "이 챕터에 사용할 분석된 자료가 없습니다.")
+
+    before_body = {"body_md": unit.body_md, "status": unit.status}
 
     unit.status = "generating"
     session.add(unit)
@@ -218,6 +231,12 @@ def generate_unit_body(
     session.add(unit)
     session.commit()
     session.refresh(unit)
+
+    log_version(
+        session, outline.book_id, "unit", unit_id,
+        {"before": before_body, "after": {"body_md": final_body, "status": unit.status}},
+        label=f"챕터 본문 생성: {unit.title}",
+    )
 
     return {
         "unit": BookUnitRead.model_validate(unit),

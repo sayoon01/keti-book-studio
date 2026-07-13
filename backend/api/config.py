@@ -8,6 +8,7 @@ from backend.agents.config_designer import suggest_book_config
 from backend.services.llm_client import get_llm_call
 from backend.storage.database import get_session
 from backend.storage.models import BookConfig, BookConfigUpdate, BookProject, Persona, SourceDocument, SourceProfile
+from backend.storage.versioning import log_version
 
 router = APIRouter(prefix="/api/books/{book_id}/config", tags=["config"])
 
@@ -28,13 +29,24 @@ def get_config(book_id: str, session: Session = Depends(get_session)):
 def update_config(book_id: str, payload: BookConfigUpdate, session: Session = Depends(get_session)):
     config = _get_config_or_404(session, book_id)
 
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    changed_fields = payload.model_dump(exclude_unset=True)
+    before = {field: getattr(config, field) for field in changed_fields}
+
+    for field, value in changed_fields.items():
         setattr(config, field, value)
     config.version += 1
 
     session.add(config)
     session.commit()
     session.refresh(config)
+
+    if changed_fields:
+        log_version(
+            session, book_id, "config", book_id,
+            {"before": before, "after": changed_fields},
+            label="설정 변경",
+        )
+        session.refresh(config)  # log_version 내부 commit으로 만료된 것을 다시 채운다
     return config
 
 

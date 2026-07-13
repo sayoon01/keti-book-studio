@@ -299,3 +299,23 @@ class ExportJob(SQLModel, table=True):
     status: str = Field(default="queued")
     result_path: Optional[str] = Field(default=None)
     created_at: datetime = Field(default_factory=utcnow)
+
+
+class ActionPlan(SQLModel, table=True):
+    """채팅에서 만들어지는 승인 대기 작업.
+
+    핵심: patch/target_id 는 기존 API(update_config, update_unit 등)가
+    받는 것과 동일한 형태로 저장한다 — 승인 시 그 API 함수를 그대로 호출한다.
+    """
+
+    __tablename__ = "action_plans"
+
+    action_id: str = Field(default_factory=lambda: new_id("action"), primary_key=True)
+    book_id: str = Field(foreign_key="book_projects.book_id", index=True)
+    action: str  # ask | edit_config | edit_unit | generate_outline | approve_outline | generate_chapter
+    target_type: str  # BookConfig | BookUnit | BookOutline
+    target_id: str
+    patch: dict = Field(default_factory=dict, sa_column=Column(JSON))
+    summary: str = Field(default="")
+    status: str = Field(default="pending")  # pending | approved | rejected | applied | failed
+    created_at: datetime = Field(default_factory=utcnow)

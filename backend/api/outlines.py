@@ -19,6 +19,7 @@ from backend.storage.models import (
     SourceProfile,
 )
 from backend.storage.recalculation import recalc_config_from_outline
+from backend.storage.versioning import log_version
 
 router = APIRouter(prefix="/api/books/{book_id}/outline", tags=["outline"])
 
@@ -53,11 +54,8 @@ def generate_outline(
     session: Session = Depends(get_session),
     llm_call=Depends(get_llm_call),
 ):
-    """AI가 목차 초안을 생성한다.
-
-    기존에 있던 unit들은 전부 지우고 새로 채운다(재생성). 이미 승인된 목차라도
-    다시 생성하면 outline.status는 'draft'로 되돌아가 재승인이 필요해진다.
-    """
+    """AI가 목차 초안을 생성한다. 재생성은 개별 unit 복원 대상이 아니라
+    감사 로그로만 남는다 (전체를 새로 만드는 작업이라 복원이 부담스러움)."""
     outline = _get_outline_or_404(session, book_id)
     book = session.get(BookProject, book_id)
     config = session.exec(select(BookConfig).where(BookConfig.book_id == book_id)).first()
@@ -94,6 +92,7 @@ def generate_outline(
     existing_units = session.exec(
         select(BookUnit).where(BookUnit.outline_id == outline.outline_id)
     ).all()
+    before_count = len(existing_units)
     for u in existing_units:
         session.delete(u)
     session.commit()
@@ -115,6 +114,12 @@ def generate_outline(
 
     recalc_config_from_outline(session, book_id)
 
+    log_version(
+        session, book_id, "outline", outline.outline_id,
+        {"before_chapter_count": before_count, "after_chapter_count": len(chapters)},
+        label="목차 새로 생성 (복원 미지원)",
+    )
+
     units = session.exec(
         select(BookUnit)
         .where(BookUnit.outline_id == outline.outline_id)
@@ -134,8 +139,16 @@ def approve_outline(book_id: str, session: Session = Depends(get_session)):
     if not units:
         raise HTTPException(400, "목차에 챕터가 하나도 없습니다. 승인할 수 없습니다.")
 
+    before_status = outline.status
     outline.status = "approved"
     session.add(outline)
     session.commit()
+    session.refresh(outline)
+
+    log_version(
+        session, book_id, "outline", outline.outline_id,
+        {"before": {"status": before_status}, "after": {"status": "approved"}},
+        label="목차 승인 (복원 미지원)",
+    )
     session.refresh(outline)
     return outline

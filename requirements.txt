@@ -11,3 +11,5 @@ pandas
 openpyxl
 pypdf
 python-multipart
+python-docx
+xhtml2pdf

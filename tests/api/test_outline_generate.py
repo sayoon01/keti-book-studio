@@ -154,6 +154,16 @@ def test_unit_generate_blocked_before_approval(client):
 
 
 def test_unit_generate_gate_passes_after_approval(client):
+    """승인 가드만 확인 — 실제 Writer/Reviewer/Reviser 파이프라인 상세 검증은
+    tests/api/test_writer_pipeline.py 에서 별도로 다룬다."""
+    from backend.services.llm_client import get_reviewer_llm_call, get_reviser_llm_call, get_writer_llm_call
+
+    app.dependency_overrides[get_writer_llm_call] = lambda: (lambda s, u: "## 본문\n\n임시 본문입니다.")
+    app.dependency_overrides[get_reviewer_llm_call] = lambda: (
+        lambda s, u: json.dumps({"issues": [], "needs_revision": False, "overall_comment": "ok"})
+    )
+    app.dependency_overrides[get_reviser_llm_call] = lambda: (lambda s, u: "수정본")
+
     book = _create_book_with_analyzed_source(client)
     _set_persona(client, book["book_id"])
     outline_data = client.post(f"/api/books/{book['book_id']}/outline/generate", json={}).json()
@@ -163,5 +173,4 @@ def test_unit_generate_gate_passes_after_approval(client):
     client.post(f"/api/books/{book['book_id']}/outline/approve")
 
     resp = client.post(f"/api/outlines/{outline_id}/units/{unit_id}/generate")
-    assert resp.status_code != 403
-    assert resp.status_code == 501
+    assert resp.status_code == 200, resp.text

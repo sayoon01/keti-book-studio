@@ -1,14 +1,23 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, select
 
+from backend.agents.reviewer import review_chapter
+from backend.agents.reviser import revise_chapter
+from backend.agents.writer import write_chapter
+from backend.services.llm_client import get_reviewer_llm_call, get_reviser_llm_call, get_writer_llm_call
+from backend.services.persona_store import read_persona_files
 from backend.storage.database import get_session
 from backend.storage.models import (
+    BookConfig,
     BookOutline,
+    BookProject,
     BookUnit,
     BookUnitCreate,
     BookUnitRead,
     BookUnitUpdate,
+    Persona,
     ReorderRequest,
+    SourceDocument,
 )
 from backend.storage.recalculation import assert_outline_editable, recalc_config_from_outline
 
@@ -62,10 +71,6 @@ def create_unit(outline_id: str, payload: BookUnitCreate, session: Session = Dep
 def update_unit(
     outline_id: str, unit_id: str, payload: BookUnitUpdate, session: Session = Depends(get_session)
 ):
-    """폼(목차 편집기)과 채팅이 동일하게 호출하는 엔드포인트.
-
-    target_characters 가 바뀌면 config.total_target_characters 가 자동 재계산된다.
-    """
     outline = _get_outline_or_404(session, outline_id)
     unit = _get_unit_or_404(session, unit_id)
     if unit.outline_id != outline_id:
@@ -123,13 +128,26 @@ def reorder_units(outline_id: str, payload: ReorderRequest, session: Session = D
     return {"ok": True}
 
 
-@router.post("/{unit_id}/generate")
-def generate_unit_body(outline_id: str, unit_id: str, session: Session = Depends(get_session)):
-    """챕터 본문 생성 진입점.
+def _collect_evidence_chunks(session: Session, book_id: str, unit: BookUnit) -> list[str]:
+    query = select(SourceDocument).where(
+        SourceDocument.book_id == book_id, SourceDocument.status == "analyzed"
+    )
+    if unit.source_ids:
+        query = query.where(SourceDocument.source_id.in_(unit.source_ids))
+    sources = session.exec(query).all()
+    return [s.raw_text[:6000] for s in sources if s.raw_text]
 
-    Phase 4 시점에는 '목차 승인 전에는 어떤 경로로도 집필이 시작되지 않는다'는
-    가드만 구현한다. 실제 Writer Agent 연동은 Phase 5에서 이 함수 내부를 채운다.
-    """
+
+@router.post("/{unit_id}/generate")
+def generate_unit_body(
+    outline_id: str,
+    unit_id: str,
+    session: Session = Depends(get_session),
+    writer_llm=Depends(get_writer_llm_call),
+    reviewer_llm=Depends(get_reviewer_llm_call),
+    reviser_llm=Depends(get_reviser_llm_call),
+):
+    """챕터 본문 생성: Writer -> Reviewer -> (필요시) Reviser."""
     outline = _get_outline_or_404(session, outline_id)
     unit = _get_unit_or_404(session, unit_id)
     if unit.outline_id != outline_id:
@@ -138,8 +156,71 @@ def generate_unit_body(outline_id: str, unit_id: str, session: Session = Depends
     if outline.status != "approved":
         raise HTTPException(403, "목차가 아직 승인되지 않았습니다. 먼저 목차를 승인해주세요.")
 
-    raise HTTPException(
-        501,
-        "본문 생성(Writer Agent)은 Phase 5에서 구현됩니다. "
-        "목차 승인 가드는 정상적으로 통과했습니다.",
-    )
+    book = session.get(BookProject, outline.book_id)
+    config = session.exec(
+        select(BookConfig).where(BookConfig.book_id == outline.book_id)
+    ).first()
+
+    persona_id = unit.persona_id or book.persona_id
+    persona = session.get(Persona, persona_id) if persona_id else None
+    persona_files = read_persona_files(persona.files) if persona else {}
+    writer_md = persona_files.get("writer.md", "")
+    reviewer_md = persona_files.get("reviewer.md", "")
+
+    evidence_chunks = _collect_evidence_chunks(session, outline.book_id, unit)
+    if not evidence_chunks:
+        raise HTTPException(400, "이 챕터에 사용할 분석된 자료가 없습니다.")
+
+    unit.status = "generating"
+    session.add(unit)
+    session.commit()
+
+    try:
+        body_md = write_chapter(
+            unit=unit.model_dump(),
+            book_config=config.model_dump(),
+            persona_writer_md=writer_md,
+            evidence_chunks=evidence_chunks,
+            llm_call=writer_llm,
+        )
+
+        review_result = review_chapter(
+            body_md=body_md,
+            unit=unit.model_dump(),
+            persona_reviewer_md=reviewer_md,
+            evidence_chunks=evidence_chunks,
+            llm_call=reviewer_llm,
+        )
+
+        final_body = body_md
+        revised = False
+        if review_result["needs_revision"] and review_result["issues"]:
+            final_body = revise_chapter(
+                body_md=body_md,
+                issues=review_result["issues"],
+                unit=unit.model_dump(),
+                persona_writer_md=writer_md,
+                llm_call=reviser_llm,
+            )
+            revised = True
+
+    except HTTPException:
+        raise
+    except Exception as exc:
+        unit.status = "approved"
+        session.add(unit)
+        session.commit()
+        raise HTTPException(502, f"본문 생성에 실패했습니다: {exc}") from exc
+
+    unit.body_md = final_body
+    unit.body_version += 1
+    unit.status = "reviewed" if revised else "generated"
+    session.add(unit)
+    session.commit()
+    session.refresh(unit)
+
+    return {
+        "unit": BookUnitRead.model_validate(unit),
+        "review": review_result,
+        "revised": revised,
+    }

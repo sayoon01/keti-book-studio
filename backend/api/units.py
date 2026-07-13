@@ -121,3 +121,25 @@ def reorder_units(outline_id: str, payload: ReorderRequest, session: Session = D
     session.add(outline)
     session.commit()
     return {"ok": True}
+
+
+@router.post("/{unit_id}/generate")
+def generate_unit_body(outline_id: str, unit_id: str, session: Session = Depends(get_session)):
+    """챕터 본문 생성 진입점.
+
+    Phase 4 시점에는 '목차 승인 전에는 어떤 경로로도 집필이 시작되지 않는다'는
+    가드만 구현한다. 실제 Writer Agent 연동은 Phase 5에서 이 함수 내부를 채운다.
+    """
+    outline = _get_outline_or_404(session, outline_id)
+    unit = _get_unit_or_404(session, unit_id)
+    if unit.outline_id != outline_id:
+        raise HTTPException(400, "unit does not belong to this outline")
+
+    if outline.status != "approved":
+        raise HTTPException(403, "목차가 아직 승인되지 않았습니다. 먼저 목차를 승인해주세요.")
+
+    raise HTTPException(
+        501,
+        "본문 생성(Writer Agent)은 Phase 5에서 구현됩니다. "
+        "목차 승인 가드는 정상적으로 통과했습니다.",
+    )

@@ -212,6 +212,7 @@ class SourceDocument(SQLModel, table=True):
     book_id: Optional[str] = Field(default=None, foreign_key="book_projects.book_id")
     source_type: str  # pdf, docx, hwp, hwpx, xlsx, csv, md, txt, url
     title: str
+    content_hash: Optional[str] = Field(default=None, index=True)
     file_path: Optional[str] = None
     url: Optional[str] = None
     raw_text: Optional[str] = None

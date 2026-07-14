@@ -187,3 +187,27 @@ def get_profile(source_id: str, session: Session = Depends(get_session)):
     if not profile:
         raise HTTPException(404, "이 자료는 아직 분석되지 않았습니다")
     return profile
+
+
+@router.delete("/api/sources/{source_id}", status_code=204)
+def delete_source(source_id: str, session: Session = Depends(get_session)):
+    """자료를 삭제한다.
+
+    SourceProfile(분석 결과)이 SQLModel Relationship cascade로 묶여있지 않아서
+    (source_documents <- source_profiles 는 FK만 있고 ORM cascade 없음),
+    여기서 직접 같이 지운다 - 안 그러면 고아 SourceProfile 행이 남는다.
+    업로드된 실제 파일도 같이 지운다 (URL 소스는 file_path가 없어서 건너뜀).
+    """
+    source = _get_source_or_404(session, source_id)
+
+    profile = session.exec(
+        select(SourceProfile).where(SourceProfile.source_id == source_id)
+    ).first()
+    if profile:
+        session.delete(profile)
+
+    if source.file_path:
+        Path(source.file_path).unlink(missing_ok=True)
+
+    session.delete(source)
+    session.commit()

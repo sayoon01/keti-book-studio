@@ -10,6 +10,7 @@ import {
 } from "../api/outline";
 import { ApiError } from "../api/client";
 import { StatusBadge } from "../components/StatusBadge";
+import { WizardStepper } from "../components/WizardStepper";
 import type { BookUnit } from "../api/types";
 
 export function OutlineEditor({ bookId }: { bookId: string }) {
@@ -97,16 +98,8 @@ export function OutlineEditor({ bookId }: { bookId: string }) {
     <div className="flex flex-col flex-1 min-h-0">
       <div className="px-7 py-4 border-b border-slate-200 flex items-center gap-5">
         <span className="text-xl font-medium">새 책 만들기</span>
-        <div className="flex items-center gap-2 text-sm text-slate-500 ml-auto">
-          <span className={outline.status !== "draft" ? "text-[var(--color-status-done-text)]" : ""}>
-            자료
-          </span>
-          <span>›</span>
-          <span>설정·페르소나</span>
-          <span>›</span>
-          <span className="text-[var(--color-accent)] font-medium">③ 목차</span>
-          <span>›</span>
-          <span>④ 생성</span>
+        <div className="ml-auto">
+          <WizardStepper bookId={bookId} current="outline" />
         </div>
       </div>
 

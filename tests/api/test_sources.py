@@ -135,6 +135,49 @@ def test_unsupported_file_type_rejected(client):
     assert resp.status_code == 400
 
 
+def test_upload_docx_and_analyze_extracts_paragraphs_and_tables(client):
+    from io import BytesIO
+
+    from docx import Document
+
+    doc = Document()
+    doc.add_heading("ALD 공정 개요", level=1)
+    doc.add_paragraph("이 문서는 원자층 증착 공정을 설명한다.")
+    table = doc.add_table(rows=2, cols=2)
+    table.rows[0].cells[0].text = "parameter"
+    table.rows[0].cells[1].text = "importance"
+    table.rows[1].cells[0].text = "temperature"
+    table.rows[1].cells[1].text = "high"
+
+    buf = BytesIO()
+    doc.save(buf)
+    buf.seek(0)
+
+    book = client.post("/api/books", json={"workspace_id": "ws-1", "title": "테스트 책"}).json()
+    resp = client.post(
+        f"/api/books/{book['book_id']}/sources/upload",
+        files={
+            "file": (
+                "note.docx",
+                buf.read(),
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            )
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    source = resp.json()
+    assert source["source_type"] == "docx"
+
+    analyze_resp = client.post(f"/api/sources/{source['source_id']}/analyze", json={})
+    assert analyze_resp.status_code == 200, analyze_resp.text
+
+    source_after = client.get(f"/api/books/{book['book_id']}/sources").json()[0]
+    assert source_after["status"] == "analyzed"
+    assert "원자층 증착 공정" in source_after["raw_text"]
+    assert "temperature" in source_after["raw_text"]
+    assert "high" in source_after["raw_text"]
+
+
 def test_extract_url_parses_title_and_strips_html():
     html = """
     <html><head><title>ALD 공정 가이드</title></head>

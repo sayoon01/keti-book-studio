@@ -1,13 +1,13 @@
 """파일 유형별 텍스트 추출.
 
-Phase 2 지원 범위: txt, md, csv, xlsx, pdf, url
-(hwp/hwpx/docx는 Phase 2.5 이후 — 별도 파서 라이브러리 필요)
+지원 범위: txt, md, csv, xlsx, pdf, docx, url
+(hwp/hwpx는 아직 — 별도 파서 라이브러리 필요)
 """
 
 import re
 from pathlib import Path
 
-SUPPORTED_FILE_TYPES = {"txt", "md", "csv", "xlsx", "pdf"}
+SUPPORTED_FILE_TYPES = {"txt", "md", "csv", "xlsx", "pdf", "docx"}
 
 MAX_EXTRACT_CHARS = 20000
 
@@ -24,6 +24,8 @@ def extract_text(file_path: str, source_type: str) -> str:
         text = _extract_tabular(file_path, sheet="__all__")
     elif source_type == "pdf":
         text = _extract_pdf(file_path)
+    elif source_type == "docx":
+        text = _extract_docx(file_path)
     else:  # pragma: no cover
         raise ValueError(f"unhandled source_type: {source_type}")
 
@@ -68,6 +70,25 @@ def _extract_pdf(file_path: str) -> str:
     for i, page in enumerate(reader.pages):
         parts.append(f"[Page {i + 1}]\n{page.extract_text() or ''}")
     return "\n\n".join(parts)
+
+
+def _extract_docx(file_path: str) -> str:
+    from docx import Document
+
+    doc = Document(file_path)
+    parts: list[str] = []
+
+    for para in doc.paragraphs:
+        if para.text.strip():
+            parts.append(para.text)
+
+    for i, table in enumerate(doc.tables, start=1):
+        parts.append(f"[Table {i}]")
+        for row in table.rows:
+            cells = [cell.text.strip() for cell in row.cells]
+            parts.append(" | ".join(cells))
+
+    return "\n".join(parts)
 
 
 def extract_url(url: str, *, http_get=None) -> tuple[str, str]:

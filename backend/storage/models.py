@@ -319,3 +319,24 @@ class ActionPlan(SQLModel, table=True):
     summary: str = Field(default="")
     status: str = Field(default="pending")  # pending | approved | rejected | applied | failed
     created_at: datetime = Field(default_factory=utcnow)
+
+
+class AgentTrace(SQLModel, table=True):
+    """ADK 콜백(before/after_model, before/after_tool)이 기록하는 실행 추적.
+
+    Jaeger 같은 외부 트레이싱 백엔드 없이, 우리 DB에 그대로 남겨서
+    '방금 채팅에서 어떤 모델이 뭘 호출했고 얼마나 걸렸는지'를 조회 가능하게 한다.
+    """
+
+    __tablename__ = "agent_traces"
+
+    trace_id: str = Field(default_factory=lambda: new_id("trace"), primary_key=True)
+    session_id: str = Field(index=True)
+    book_id: Optional[str] = Field(default=None, index=True)
+    event_type: str  # model_call | tool_call
+    name: str
+    input_summary: str = Field(default="")
+    output_summary: str = Field(default="")
+    latency_ms: Optional[float] = Field(default=None)
+    error: Optional[str] = Field(default=None)
+    created_at: datetime = Field(default_factory=utcnow)

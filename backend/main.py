@@ -1,11 +1,11 @@
 from fastapi import FastAPI
 from sqlmodel import Session
 
-from backend.api import books, chat, config, exports, outlines, personas, sources, units, versions, visuals
+from backend.api import books, chat, chat_v2, config, exports, outlines, personas, sources, traces, units, versions, visuals
 from backend.storage.database import create_db_and_tables, engine
 from backend.storage.persona_seed import seed_system_personas
 
-app = FastAPI(title="KETI Book Studio API", version="0.9.0-phase9")
+app = FastAPI(title="KETI Book Studio API", version="0.10.0-phase10c")
 
 
 @app.on_event("startup")
@@ -25,8 +25,10 @@ app.include_router(visuals.router)
 app.include_router(chat.router)
 app.include_router(versions.router)
 app.include_router(exports.router)
+app.include_router(traces.router)
+app.include_router(chat_v2.router)
 
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "phase": 9}
+    return {"status": "ok", "phase": "10c"}

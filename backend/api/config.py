@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlmodel import Session, select
 
-from backend.agents.config_designer import suggest_book_config
+from backend.skills.config_designer import suggest_book_config
 from backend.services.llm_client import get_llm_call
 from backend.storage.database import get_session
 from backend.storage.models import BookConfig, BookConfigUpdate, BookProject, Persona, SourceDocument, SourceProfile

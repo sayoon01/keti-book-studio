@@ -5,9 +5,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlmodel import Session, select
 
-from backend.agents.field_extractor import extract_config_patch, extract_unit_patch
-from backend.agents.intent_classifier import classify_intent
-from backend.agents.qa_agent import answer_question
+from backend.skills.field_extractor import extract_config_patch, extract_unit_patch
+from backend.skills.intent_classifier import classify_intent
+from backend.skills.qa import answer_question
 from backend.api import config as config_api
 from backend.api import outlines as outlines_api
 from backend.api import units as units_api

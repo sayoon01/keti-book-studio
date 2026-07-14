@@ -4,8 +4,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlmodel import Session, select
 
-from backend.agents.diagram_agent import generate_diagram
-from backend.agents.visual_planner import plan_visuals
+from backend.skills.diagram import generate_diagram
+from backend.skills.visual_planner import plan_visuals
 from backend.services.data_tools import compute_chart_data, get_columns, load_table
 from backend.services.llm_client import get_llm_call, get_writer_llm_call
 from backend.services.persona_store import read_persona_files

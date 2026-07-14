@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile
 from pydantic import BaseModel
 from sqlmodel import Session, select
 
-from backend.agents.research_agent import analyze_source
+from backend.skills.research import analyze_source
 from backend.services.extractors import SUPPORTED_FILE_TYPES, extract_text, extract_url
 from backend.services.llm_client import get_llm_call
 from backend.storage.database import get_session

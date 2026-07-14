@@ -1,9 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, select
 
-from backend.agents.reviewer import review_chapter
-from backend.agents.reviser import revise_chapter
-from backend.agents.writer import write_chapter
+from backend.orchestration.chapter_pipeline import run_chapter_pipeline
 from backend.services.llm_client import get_reviewer_llm_call, get_reviser_llm_call, get_writer_llm_call
 from backend.services.persona_store import read_persona_files
 from backend.storage.database import get_session
@@ -189,33 +187,19 @@ def generate_unit_body(
     session.commit()
 
     try:
-        body_md = write_chapter(
+        pipeline_result = run_chapter_pipeline(
             unit=unit.model_dump(),
             book_config=config.model_dump(),
             persona_writer_md=writer_md,
-            evidence_chunks=evidence_chunks,
-            llm_call=writer_llm,
-        )
-
-        review_result = review_chapter(
-            body_md=body_md,
-            unit=unit.model_dump(),
             persona_reviewer_md=reviewer_md,
             evidence_chunks=evidence_chunks,
-            llm_call=reviewer_llm,
+            writer_llm=writer_llm,
+            reviewer_llm=reviewer_llm,
+            reviser_llm=reviser_llm,
         )
-
-        final_body = body_md
-        revised = False
-        if review_result["needs_revision"] and review_result["issues"]:
-            final_body = revise_chapter(
-                body_md=body_md,
-                issues=review_result["issues"],
-                unit=unit.model_dump(),
-                persona_writer_md=writer_md,
-                llm_call=reviser_llm,
-            )
-            revised = True
+        final_body = pipeline_result["body_md"]
+        review_result = pipeline_result["review"]
+        revised = pipeline_result["revised"]
 
     except HTTPException:
         raise

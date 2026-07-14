@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlmodel import Session, select
 
-from backend.agents.outline_planner import suggest_outline
+from backend.skills.outline_planner import suggest_outline
 from backend.services.llm_client import get_llm_call
 from backend.services.persona_store import read_persona_files
 from backend.storage.database import get_session

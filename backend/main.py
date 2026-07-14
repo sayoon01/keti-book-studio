@@ -5,7 +5,7 @@ from backend.api import books, chat, chat_v2, config, exports, outlines, persona
 from backend.storage.database import create_db_and_tables, engine
 from backend.storage.persona_seed import seed_system_personas
 
-app = FastAPI(title="KETI Book Studio API", version="0.10.0-phase10c")
+app = FastAPI(title="KETI Book Studio API", version="0.10.0-phase10c-step3")
 
 
 @app.on_event("startup")
@@ -31,4 +31,4 @@ app.include_router(chat_v2.router)
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "phase": "10c"}
+    return {"status": "ok", "phase": "10c-step3"}

@@ -174,3 +174,40 @@ def test_unit_generate_gate_passes_after_approval(client):
 
     resp = client.post(f"/api/outlines/{outline_id}/units/{unit_id}/generate")
     assert resp.status_code == 200, resp.text
+
+
+def test_dry_run_returns_chapters_without_touching_db(client):
+    """dry_run=True 는 LLM 제안만 반환하고 DB는 전혀 안 바뀌어야 한다."""
+    book = _create_book_with_analyzed_source(client)
+    _set_persona(client, book["book_id"])
+
+    client.post(f"/api/books/{book['book_id']}/outline/generate", json={})
+    before = client.get(f"/api/books/{book['book_id']}/outline").json()
+    before_unit_ids = {u["unit_id"] for u in before["units"]}
+    assert len(before_unit_ids) == 3
+
+    resp = client.post(
+        f"/api/books/{book['book_id']}/outline/generate", json={"dry_run": True}
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+
+    assert "outline" not in body
+    assert len(body["chapters"]) == 3
+    assert all("unit_id" not in ch for ch in body["chapters"])
+    assert all(k in body["chapters"][0] for k in ["title", "description", "target_characters"])
+
+    after = client.get(f"/api/books/{book['book_id']}/outline").json()
+    after_unit_ids = {u["unit_id"] for u in after["units"]}
+    assert after_unit_ids == before_unit_ids
+    assert after["outline"]["status"] == before["outline"]["status"]
+
+
+def test_dry_run_still_validates_persona_and_sources(client):
+    """미리보기여도 검증(페르소나/분석자료)은 그대로 걸려야 한다."""
+    book = client.post("/api/books", json={"workspace_id": "ws-1", "title": "빈 책"}).json()
+
+    resp = client.post(
+        f"/api/books/{book['book_id']}/outline/generate", json={"dry_run": True}
+    )
+    assert resp.status_code == 400

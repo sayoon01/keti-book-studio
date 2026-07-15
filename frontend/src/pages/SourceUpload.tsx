@@ -6,6 +6,7 @@ import {
   deleteSource,
   getSourceProfile,
   listSources,
+  registerLocalDir,
   registerSourceUrl,
   uploadSourceFile,
 } from "../api/sources";
@@ -27,13 +28,21 @@ const STATUS_STYLE: Record<SourceStatus, string> = {
   failed: "bg-[var(--color-status-failed-bg)] text-[var(--color-status-failed-text)]",
 };
 
+function isValidUrl(value: string): boolean {
+  return /^https?:\/\//.test(value.trim());
+}
+
 export function SourceUpload({ bookId }: { bookId: string }) {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [urlInput, setUrlInput] = useState("");
+  const [dirInput, setDirInput] = useState("");
+  const [dirRecursive, setDirRecursive] = useState(false);
+  const [showDirForm, setShowDirForm] = useState(false);
   const [selectedSourceId, setSelectedSourceId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [infoMessage, setInfoMessage] = useState<string | null>(null);
 
   const sourcesQuery = useQuery({
     queryKey: ["sources", bookId],
@@ -43,16 +52,6 @@ export function SourceUpload({ bookId }: { bookId: string }) {
 
   const invalidateSources = () =>
     queryClient.invalidateQueries({ queryKey: ["sources", bookId] });
-
-  const analyzeMutation = useMutation({
-    mutationFn: (sourceId: string) => analyzeSource(sourceId),
-    onSuccess: (_profile, sourceId) => {
-      invalidateSources();
-      setSelectedSourceId(sourceId);
-    },
-    onError: (err) =>
-      setErrorMessage(err instanceof ApiError ? err.message : "분석에 실패했습니다."),
-  });
 
   const uploadMutation = useMutation({
     mutationFn: (file: File) => uploadSourceFile(bookId, file),
@@ -73,6 +72,37 @@ export function SourceUpload({ bookId }: { bookId: string }) {
     },
     onError: (err) =>
       setErrorMessage(err instanceof ApiError ? err.message : "URL 등록에 실패했습니다."),
+  });
+
+  const registerDirMutation = useMutation({
+    mutationFn: () => registerLocalDir(bookId, dirInput.trim(), dirRecursive),
+    onSuccess: (result) => {
+      invalidateSources();
+      setDirInput("");
+      const parts = [`${result.registered.length}개 등록·분석 완료`];
+      if (result.skipped.length > 0) parts.push(`${result.skipped.length}개 건너뜀(지원 안 하는 형식)`);
+      if (result.failed.length > 0) parts.push(`${result.failed.length}개 실패`);
+      setInfoMessage(parts.join(" · "));
+      if (result.failed.length > 0) {
+        setErrorMessage(
+          result.failed.map((f) => `${f.filename}: ${f.error}`).join("\n")
+        );
+      }
+    },
+    onError: (err) =>
+      setErrorMessage(
+        err instanceof ApiError ? err.message : "폴더 등록에 실패했습니다."
+      ),
+  });
+
+  const analyzeMutation = useMutation({
+    mutationFn: (sourceId: string) => analyzeSource(sourceId),
+    onSuccess: (_profile, sourceId) => {
+      invalidateSources();
+      setSelectedSourceId(sourceId);
+    },
+    onError: (err) =>
+      setErrorMessage(err instanceof ApiError ? err.message : "분석에 실패했습니다."),
   });
 
   const deleteMutation = useMutation({
@@ -105,9 +135,17 @@ export function SourceUpload({ bookId }: { bookId: string }) {
       </div>
 
       {errorMessage && (
-        <div className="mx-7 mt-4 px-4 py-3 rounded-lg bg-red-50 text-red-700 text-sm flex items-center justify-between">
+        <div className="mx-7 mt-4 px-4 py-3 rounded-lg bg-red-50 text-red-700 text-sm flex items-center justify-between whitespace-pre-line">
           {errorMessage}
-          <button onClick={() => setErrorMessage(null)} className="ml-3 text-base">
+          <button onClick={() => setErrorMessage(null)} className="ml-3 text-base shrink-0">
+            ✕
+          </button>
+        </div>
+      )}
+      {infoMessage && (
+        <div className="mx-7 mt-4 px-4 py-3 rounded-lg bg-[var(--color-accent-light)] text-[var(--color-accent)] text-sm flex items-center justify-between">
+          {infoMessage}
+          <button onClick={() => setInfoMessage(null)} className="ml-3 text-base">
             ✕
           </button>
         </div>
@@ -125,12 +163,13 @@ export function SourceUpload({ bookId }: { bookId: string }) {
               const file = e.dataTransfer.files[0];
               if (file) uploadMutation.mutate(file);
             }}
-            className="border-2 border-dashed border-slate-300 rounded-lg py-10 text-center cursor-pointer hover:bg-slate-50 mb-3"
+            className="border-2 border-dashed border-slate-300 rounded-lg py-16 text-center cursor-pointer hover:bg-slate-50 hover:border-[var(--color-accent)] transition-colors mb-4"
           >
-            <div className="text-sm text-slate-500">
+            <div className="text-3xl mb-2">📁</div>
+            <div className="text-base text-slate-600 font-medium">
               파일을 드래그하거나 클릭하여 업로드하세요
             </div>
-            <div className="text-xs text-slate-400 mt-1">
+            <div className="text-sm text-slate-400 mt-1.5">
               PDF, DOCX, XLSX, CSV, MD, TXT
             </div>
             <input
@@ -145,24 +184,73 @@ export function SourceUpload({ bookId }: { bookId: string }) {
             />
           </div>
 
-          <div className="flex gap-2 mb-6">
-            <input
-              value={urlInput}
-              onChange={(e) => setUrlInput(e.target.value)}
-              onKeyDown={(e) =>
-                e.key === "Enter" && urlInput.trim() && registerUrlMutation.mutate(urlInput.trim())
-              }
-              placeholder="https://example.com/article"
-              className="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm"
-            />
-            <button
-              onClick={() => urlInput.trim() && registerUrlMutation.mutate(urlInput.trim())}
-              disabled={!urlInput.trim() || registerUrlMutation.isPending}
-              className="text-sm px-4 py-2 rounded-lg border border-slate-200 disabled:opacity-50"
-            >
-              추가
-            </button>
+          <div className="mb-1">
+            <div className="flex gap-2">
+              <input
+                value={urlInput}
+                onChange={(e) => setUrlInput(e.target.value)}
+                onKeyDown={(e) =>
+                  e.key === "Enter" &&
+                  isValidUrl(urlInput) &&
+                  registerUrlMutation.mutate(urlInput.trim())
+                }
+                placeholder="https://example.com/article"
+                className="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm"
+              />
+              <button
+                onClick={() => isValidUrl(urlInput) && registerUrlMutation.mutate(urlInput.trim())}
+                disabled={!isValidUrl(urlInput) || registerUrlMutation.isPending}
+                className="text-sm px-4 py-2 rounded-lg border border-slate-200 disabled:opacity-50"
+              >
+                추가
+              </button>
+            </div>
+            {urlInput.trim() && !isValidUrl(urlInput) && (
+              <p className="text-xs text-red-500 mt-1">
+                웹 주소는 http:// 또는 https:// 로 시작해야 합니다. 서버 파일
+                경로는 아래 "서버 폴더 경로로 여러 파일 한 번에 등록"을
+                이용하세요.
+              </p>
+            )}
           </div>
+
+          <button
+            onClick={() => setShowDirForm((v) => !v)}
+            className="text-sm text-slate-500 hover:text-[var(--color-accent)] hover:bg-slate-50 mb-3 px-3 py-1.5 rounded-lg border border-slate-200 inline-flex items-center gap-1.5"
+          >
+            <span className="text-xs">{showDirForm ? "▾" : "▸"}</span> 서버 폴더 경로로 여러 파일 한 번에 등록
+          </button>
+
+          {showDirForm && (
+            <div className="border border-slate-200 rounded-lg p-3 mb-6 bg-slate-50">
+              <label className="text-xs text-slate-500 block mb-1.5">
+                서버(백엔드가 돌아가는 머신)의 폴더 경로
+              </label>
+              <input
+                value={dirInput}
+                onChange={(e) => setDirInput(e.target.value)}
+                placeholder="/home/keti_spark1/사출기_데이터"
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm mb-2"
+              />
+              <label className="flex items-center gap-1.5 text-xs text-slate-500 mb-3">
+                <input
+                  type="checkbox"
+                  checked={dirRecursive}
+                  onChange={(e) => setDirRecursive(e.target.checked)}
+                />
+                하위 폴더까지 포함
+              </label>
+              <button
+                onClick={() => dirInput.trim() && registerDirMutation.mutate()}
+                disabled={!dirInput.trim() || registerDirMutation.isPending}
+                className="w-full text-sm py-2 rounded-lg bg-[var(--color-accent)] text-white disabled:opacity-50"
+              >
+                {registerDirMutation.isPending
+                  ? "등록·분석 중... (파일 개수에 따라 오래 걸릴 수 있음)"
+                  : "폴더 안 파일 전부 등록하고 분석"}
+              </button>
+            </div>
+          )}
 
           <div className="text-sm font-medium mb-2">
             업로드된 자료 ({sources.length})
@@ -194,6 +282,20 @@ export function SourceUpload({ bookId }: { bookId: string }) {
               />
             ))}
           </div>
+
+          {sources.length > 0 && (
+            <div className="mt-8 border border-slate-200 rounded-lg p-5 bg-slate-50">
+              <div className="text-sm font-medium text-slate-600 mb-2">
+                💡 다음 단계
+              </div>
+              <p className="text-sm text-slate-500 leading-relaxed">
+                자료를 더 추가하거나, 왼쪽 목록에서 자료를 눌러 분석 결과를
+                확인해보세요. 최소 1개 이상 분석이 끝나면 &quot;다음: 책 설정&quot;으로
+                넘어갈 수 있습니다. 여러 파일을 한 번에 넣고 싶다면 위의
+                &quot;서버 폴더 경로로 여러 파일 한 번에 등록&quot;을 써보세요.
+              </p>
+            </div>
+          )}
         </div>
 
         <div className="w-[380px] shrink-0 p-6 overflow-auto">

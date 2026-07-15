@@ -187,3 +187,72 @@ def test_extract_url_parses_title_and_strips_html():
     assert title == "ALD 공정 가이드"
     assert "ignore me" not in text
     assert "온도와 압력이 중요합니다" in text
+
+
+def test_register_local_dir_registers_and_auto_analyzes(client, tmp_path):
+    (tmp_path / "report1.txt").write_text("사출기 온도 데이터입니다.", encoding="utf-8")
+    (tmp_path / "report2.md").write_text("# 사출기 압력 데이터", encoding="utf-8")
+    (tmp_path / "image.png").write_bytes(b"not a real image")
+    sub = tmp_path / "sub"
+    sub.mkdir()
+    (sub / "report3.txt").write_text("서브 폴더 자료", encoding="utf-8")
+
+    book = _create_book(client)
+
+    resp = client.post(
+        f"/api/books/{book['book_id']}/sources/register-local-dir",
+        json={"dir_path": str(tmp_path)},
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+
+    registered_titles = {r["title"] for r in body["registered"]}
+    assert registered_titles == {"report1.txt", "report2.md"}
+    assert body["skipped"] == ["image.png"]
+    assert body["failed"] == []
+    assert all(r["status"] == "analyzed" for r in body["registered"])
+
+    sources_after = client.get(f"/api/books/{book['book_id']}/sources").json()
+    assert len(sources_after) == 2
+    assert all(s["status"] == "analyzed" for s in sources_after)
+
+
+def test_register_local_dir_recursive_includes_subfolders(client, tmp_path):
+    (tmp_path / "report1.txt").write_text("자료1", encoding="utf-8")
+    sub = tmp_path / "sub"
+    sub.mkdir()
+    (sub / "report2.txt").write_text("자료2", encoding="utf-8")
+
+    book = _create_book(client)
+
+    resp = client.post(
+        f"/api/books/{book['book_id']}/sources/register-local-dir",
+        json={"dir_path": str(tmp_path), "recursive": True},
+    )
+    registered_titles = {r["title"] for r in resp.json()["registered"]}
+    assert registered_titles == {"report1.txt", "report2.txt"}
+
+
+def test_register_local_dir_rerun_does_not_reanalyze(client, tmp_path):
+    (tmp_path / "report1.txt").write_text("자료1", encoding="utf-8")
+    book = _create_book(client)
+
+    client.post(
+        f"/api/books/{book['book_id']}/sources/register-local-dir",
+        json={"dir_path": str(tmp_path)},
+    )
+
+    call_count = {"n": 0}
+
+    def _counting_llm(system_prompt: str, user_prompt: str) -> str:
+        call_count["n"] += 1
+        return _fake_llm_call(system_prompt, user_prompt)
+
+    app.dependency_overrides[get_llm_call] = lambda: _counting_llm
+
+    resp = client.post(
+        f"/api/books/{book['book_id']}/sources/register-local-dir",
+        json={"dir_path": str(tmp_path)},
+    )
+    assert resp.status_code == 200, resp.text
+    assert call_count["n"] == 0

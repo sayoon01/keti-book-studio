@@ -44,3 +44,21 @@ export async function getSourceProfile(sourceId: string): Promise<SourceProfile>
 export async function deleteSource(sourceId: string): Promise<void> {
   await apiClient.delete(`/sources/${sourceId}`);
 }
+
+export interface RegisterLocalDirResult {
+  registered: SourceDocument[];
+  skipped: string[];
+  failed: { filename: string; error: string }[];
+}
+
+export async function registerLocalDir(
+  bookId: string,
+  dirPath: string,
+  recursive: boolean
+): Promise<RegisterLocalDirResult> {
+  const res = await apiClient.post(`/books/${bookId}/sources/register-local-dir`, {
+    dir_path: dirPath,
+    recursive,
+  });
+  return res.data;
+}

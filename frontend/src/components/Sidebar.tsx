@@ -13,7 +13,7 @@ export function Sidebar() {
     <aside className="w-[220px] shrink-0 bg-[var(--color-sidebar)] flex flex-col py-5">
       <div className="flex items-center gap-2 px-5 pb-6 text-white font-medium text-base">
         <span className="text-[var(--color-sidebar-active)]">⚡</span>
-        KETI AI Studio
+        KETI Book Studio
       </div>
       <nav className="flex flex-col gap-1 px-3">
         {navItems.map((item) => (

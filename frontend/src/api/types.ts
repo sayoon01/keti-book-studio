@@ -79,6 +79,13 @@ export interface BookProject {
   updated_at: string;
 }
 
+export interface ChapterProposal {
+  title: string;
+  description: string;
+  target_characters: number;
+  must_cover: string[];
+}
+
 export interface OutlineWithUnits {
   outline: BookOutline;
   units: BookUnit[];

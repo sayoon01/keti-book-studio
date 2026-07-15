@@ -3,6 +3,7 @@ import type {
   BookConfig,
   BookUnit,
   BookUnitUpdatePayload,
+  ChapterProposal,
   OutlineWithUnits,
 } from "./types";
 
@@ -24,6 +25,17 @@ export async function generateOutline(
     chapter_count: chapterCount ?? 0,
   });
   return res.data;
+}
+
+export async function previewOutline(
+  bookId: string,
+  chapterCount?: number
+): Promise<ChapterProposal[]> {
+  const res = await apiClient.post(`/books/${bookId}/outline/generate`, {
+    chapter_count: chapterCount ?? 0,
+    dry_run: true,
+  });
+  return res.data.chapters;
 }
 
 export async function approveOutline(bookId: string) {

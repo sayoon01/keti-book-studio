@@ -45,6 +45,7 @@ def get_outline(book_id: str, session: Session = Depends(get_session)):
 class OutlineGenerateRequest(BaseModel):
     source_ids: Optional[list[str]] = None
     chapter_count: Optional[int] = None
+    dry_run: bool = False
 
 
 @router.post("/generate")
@@ -54,8 +55,19 @@ def generate_outline(
     session: Session = Depends(get_session),
     llm_call=Depends(get_llm_call),
 ):
-    """AI가 목차 초안을 생성한다. 재생성은 개별 unit 복원 대상이 아니라
-    감사 로그로만 남는다 (전체를 새로 만드는 작업이라 복원이 부담스러움)."""
+    """AI가 목차 초안을 생성한다.
+
+    dry_run=True 면 LLM 제안만 받아오고 DB는 전혀 건드리지 않는다 (미리보기용 -
+    프론트가 "변경 전/후"를 비교해서 사용자가 적용할지 고를 수 있게 하기 위함).
+    dry_run=False(기본) 일 때만 실제로 기존 unit을 지우고 새로 채운다.
+
+    기존에 있던 unit들은 전부 지우고 새로 채운다(재생성). 이미 승인된 목차라도
+    다시 생성하면 outline.status는 'draft'로 되돌아가 재승인이 필요해진다.
+
+    주의: 목차 구조 재생성은 개별 unit 단위 복원(BookVersion)의 대상이 아니다
+    (전체를 통째로 새로 만드는 작업이라 이전 상태 diff가 너무 커짐).
+    감사 목적으로만 로그가 남고, 복원은 지원하지 않는다.
+    """
     outline = _get_outline_or_404(session, book_id)
     book = session.get(BookProject, book_id)
     config = session.exec(select(BookConfig).where(BookConfig.book_id == book_id)).first()
@@ -88,6 +100,9 @@ def generate_outline(
     )
     if not chapters:
         raise HTTPException(502, "AI가 목차를 생성하지 못했습니다. 다시 시도해주세요.")
+
+    if payload.dry_run:
+        return {"chapters": chapters}
 
     existing_units = session.exec(
         select(BookUnit).where(BookUnit.outline_id == outline.outline_id)

@@ -10,6 +10,7 @@ import { NewBook } from "./pages/NewBook.tsx";
 import { OutlineEditorPage } from "./pages/OutlineEditorPage.tsx";
 import { SourceUploadPage } from "./pages/SourceUploadPage.tsx";
 import { ConfigPersonaPage } from "./pages/ConfigPersonaPage.tsx";
+import { GenerationProgressPage } from "./pages/GenerationProgressPage.tsx";
 import { ComingSoon } from "./pages/ComingSoon.tsx";
 
 const queryClient = new QueryClient();
@@ -26,6 +27,7 @@ createRoot(document.getElementById("root")!).render(
             <Route path="books/:bookId/sources" element={<SourceUploadPage />} />
             <Route path="books/:bookId/config" element={<ConfigPersonaPage />} />
             <Route path="books/:bookId/outline" element={<OutlineEditorPage />} />
+            <Route path="books/:bookId/generate" element={<GenerationProgressPage />} />
             <Route path="personas" element={<ComingSoon label="페르소나 관리" />} />
             <Route path="runs" element={<ComingSoon label="실행 기록" />} />
           </Route>

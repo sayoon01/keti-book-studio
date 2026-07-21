@@ -1,5 +1,6 @@
 import { forwardRef, useImperativeHandle, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 import {
   approveOutline,
   createUnit,
@@ -21,6 +22,7 @@ type UnitDetailHandle = {
 
 export function OutlineEditor({ bookId }: { bookId: string }) {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const detailRef = useRef<UnitDetailHandle>(null);
   const [selectedUnitId, setSelectedUnitId] = useState<string | null>(null);
   const [proposal, setProposal] = useState<ChapterProposal[] | null>(null);
@@ -93,7 +95,10 @@ export function OutlineEditor({ bookId }: { bookId: string }) {
 
   const approveMutation = useMutation({
     mutationFn: () => approveOutline(bookId),
-    onSuccess: invalidate,
+    onSuccess: () => {
+      invalidate();
+      navigate(`/books/${bookId}/generate`);
+    },
     onError: (err) =>
       setErrorMessage(
         err instanceof ApiError ? err.message : "승인에 실패했습니다."

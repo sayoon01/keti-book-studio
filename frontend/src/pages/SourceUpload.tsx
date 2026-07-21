@@ -12,6 +12,7 @@ import {
 } from "../api/sources";
 import { ApiError } from "../api/client";
 import { WizardStepper } from "../components/WizardStepper";
+import { DirectoryUploadSection } from "../components/DirectoryUploadSection";
 import type { SourceDocument, SourceStatus } from "../api/types";
 
 const STATUS_LABEL: Record<SourceStatus, string> = {
@@ -154,6 +155,17 @@ export function SourceUpload({ bookId }: { bookId: string }) {
       <div className="flex flex-1 min-h-0">
         <div className="flex-1 p-7 overflow-auto border-r border-slate-200">
           <div className="text-base font-medium mb-3">자료 추가</div>
+
+          <DirectoryUploadSection
+            bookId={bookId}
+            onUploaded={() => {
+              invalidateSources();
+              queryClient.invalidateQueries({
+                queryKey: ["source-library", bookId],
+              });
+              setInfoMessage("폴더 자료를 자료 라이브러리에 등록했습니다.");
+            }}
+          />
 
           <div
             onClick={() => fileInputRef.current?.click()}

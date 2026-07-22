@@ -6,6 +6,9 @@ from typing import Any, Protocol
 from sqlmodel import Session
 
 from backend.agents.registry import AgentRegistry
+from backend.events.event_publisher import (
+    EventPublisher,
+)
 from backend.orchestration.handoff_manager import (
     HandoffManager,
 )
@@ -15,6 +18,9 @@ from backend.orchestration.stage_runner import (
 )
 from backend.services.agent_task_service import (
     AgentTaskService,
+)
+from backend.services.event_service import (
+    EventService,
 )
 from backend.storage.model_utils import (
     json_dumps,
@@ -148,6 +154,9 @@ class ProductionEngine:
         handoff_manager: (
             HandoffManagerProtocol | None
         ) = None,
+        event_publisher: (
+            EventPublisher | None
+        ) = None,
     ) -> None:
         self.session = session
 
@@ -179,6 +188,13 @@ class ProductionEngine:
             or HandoffManager(session)
         )
 
+        self.event_publisher = (
+            event_publisher
+            or EventPublisher(
+                EventService(session)
+            )
+        )
+
     async def execute_run(
         self,
         *,
@@ -197,7 +213,9 @@ class ProductionEngine:
         stage_results: list[StageRunResult] = []
 
         try:
-            self._mark_run_running(run)
+            run = self._mark_run_running(run)
+
+            self.event_publisher.run_started(run)
 
             while True:
                 stages = self.repository.list_stages(
@@ -223,6 +241,19 @@ class ProductionEngine:
                         )
                     )
 
+                    output_artifact_ids = (
+                        self._collect_run_outputs(
+                            stages
+                        )
+                    )
+
+                    self.event_publisher.run_completed(
+                        completed_run,
+                        output_artifact_ids=(
+                            output_artifact_ids
+                        ),
+                    )
+
                     return ProductionExecutionResult(
                         run_id=completed_run.run_id,
                         status=completed_run.status,
@@ -235,9 +266,7 @@ class ProductionEngine:
                         ],
                         failed_stage_ids=[],
                         output_artifact_ids=(
-                            self._collect_run_outputs(
-                                stages
-                            )
+                            output_artifact_ids
                         ),
                         stage_results=stage_results,
                     )
@@ -275,7 +304,7 @@ class ProductionEngine:
                 # 안정성을 위해 한 번에 하나의 Stage만 실행
                 stage = ready_stages[0]
 
-                self._set_current_stage(
+                run = self._set_current_stage(
                     run=run,
                     stage=stage,
                 )
@@ -295,13 +324,46 @@ class ProductionEngine:
                     task_id=task.task_id,
                 )
 
-                stage_result = (
-                    await self.stage_runner.run_stage(
-                        stage_id=stage.stage_id
-                    )
+                self.event_publisher.stage_started(
+                    stage
                 )
 
+                try:
+                    stage_result = (
+                        await self.stage_runner.run_stage(
+                            stage_id=stage.stage_id
+                        )
+                    )
+                except Exception as stage_error:
+                    failed_stage = (
+                        self.repository.get_stage(
+                            stage.stage_id
+                        )
+                        or stage
+                    )
+
+                    self.event_publisher.stage_failed(
+                        failed_stage,
+                        error=stage_error,
+                    )
+
+                    raise
+
                 stage_results.append(stage_result)
+
+                completed_stage = (
+                    self.repository.get_stage(
+                        stage.stage_id
+                    )
+                    or stage
+                )
+
+                self.event_publisher.stage_completed(
+                    completed_stage,
+                    output_artifact_ids=(
+                        stage_result.output_artifact_ids
+                    ),
+                )
 
                 if not stage_result.success:
                     raise ProductionEngineError(
@@ -311,7 +373,15 @@ class ProductionEngine:
                     )
 
         except Exception as exc:
-            self._mark_run_failed(run=run, error=exc)
+            failed_run = self._mark_run_failed(
+                run=run,
+                error=exc,
+            )
+
+            self.event_publisher.run_failed(
+                failed_run,
+                error=exc,
+            )
 
             if isinstance(exc, ProductionEngineError):
                 raise
@@ -349,7 +419,9 @@ class ProductionEngine:
             )
 
         if self._run_status(run) != "RUNNING":
-            self._mark_run_running(run)
+            run = self._mark_run_running(run)
+
+            self.event_publisher.run_started(run)
 
         stages = self.repository.list_stages(
             run.run_id
@@ -371,7 +443,10 @@ class ProductionEngine:
 
         stage = ready_stages[0]
 
-        self._set_current_stage(run=run, stage=stage)
+        run = self._set_current_stage(
+            run=run,
+            stage=stage,
+        )
 
         self._handoff_dependencies(
             stage=stage,
@@ -388,8 +463,49 @@ class ProductionEngine:
             task_id=task.task_id,
         )
 
-        result = await self.stage_runner.run_stage(
-            stage_id=stage.stage_id
+        self.event_publisher.stage_started(stage)
+
+        try:
+            result = await self.stage_runner.run_stage(
+                stage_id=stage.stage_id
+            )
+        except Exception as stage_error:
+            failed_stage = (
+                self.repository.get_stage(
+                    stage.stage_id
+                )
+                or stage
+            )
+
+            self.event_publisher.stage_failed(
+                failed_stage,
+                error=stage_error,
+            )
+
+            failed_run = self._mark_run_failed(
+                run=run,
+                error=stage_error,
+            )
+
+            self.event_publisher.run_failed(
+                failed_run,
+                error=stage_error,
+            )
+
+            raise
+
+        completed_stage = (
+            self.repository.get_stage(
+                stage.stage_id
+            )
+            or stage
+        )
+
+        self.event_publisher.stage_completed(
+            completed_stage,
+            output_artifact_ids=(
+                result.output_artifact_ids
+            ),
         )
 
         refreshed_stages = (
@@ -402,9 +518,20 @@ class ProductionEngine:
         )
 
         if self._all_stages_completed(refreshed_stages):
-            self._mark_run_completed(
-                run=run,
-                stages=refreshed_stages,
+            completed_run = (
+                self._mark_run_completed(
+                    run=run,
+                    stages=refreshed_stages,
+                )
+            )
+
+            self.event_publisher.run_completed(
+                completed_run,
+                output_artifact_ids=(
+                    self._collect_run_outputs(
+                        refreshed_stages
+                    )
+                ),
             )
 
         return result

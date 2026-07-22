@@ -2,6 +2,13 @@ from __future__ import annotations
 
 from sqlmodel import Session
 
+from backend.agents.registry import AgentRegistry
+from backend.orchestration.publishing_agent_registry import (
+    build_publishing_agent_registry,
+)
+from backend.orchestration.workflow_validator import (
+    validate_workflow_artifact_contract,
+)
 from backend.publishing.enums import (
     ProductionRunStatus,
     ProductionStageStatus,
@@ -34,10 +41,18 @@ from backend.storage.repositories.production_repository import (
 
 
 class ProductionService:
-    def __init__(self, session: Session):
+    def __init__(
+        self,
+        session: Session,
+        agent_registry: AgentRegistry | None = None,
+    ):
         self.session = session
         self.repository = ProductionRepository(session)
         self.event_repository = EventRepository(session)
+        self.agent_registry = (
+            agent_registry
+            or build_publishing_agent_registry()
+        )
 
     def create_run(
         self,
@@ -61,6 +76,11 @@ class ProductionService:
             )
 
         self._validate_stage_definitions(stages)
+
+        validate_workflow_artifact_contract(
+            stages=stages,
+            agent_registry=self.agent_registry,
+        )
 
         run = ProductionRun(
             book_id=request.book_id,

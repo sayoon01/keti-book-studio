@@ -75,3 +75,43 @@ def test_build_publishing_agent_registry():
     assert registry.get_single_for_stage(
         ProductionStageType.CHAPTER_WRITING.value
     ).name == "chapter_writer"
+
+    assert registry.get_single_for_stage(
+        ProductionStageType.CHAPTER_REVIEW.value
+    ).name == "chapter_reviewer"
+
+    assert registry.get_single_for_stage(
+        ProductionStageType.CHAPTER_EDITING.value
+    ).name == "chapter_editor"
+
+    assert registry.get_single_for_stage(
+        ProductionStageType.CHAPTER_REVISION.value
+    ).name == "chapter_reviser"
+
+    assert registry.get_single_for_stage(
+        ProductionStageType.CHAPTER_READER_TEST.value
+    ).name == "chapter_reader"
+
+    assert registry.get_single_for_stage(
+        ProductionStageType.CHAPTER_FINALIZATION.value
+    ).name == "chapter_finalizer"
+
+    assert registry.get_by_role(
+        AgentRole.REVIEW_AGGREGATOR.value
+    ).name == "chapter_reviewer"
+
+    assert registry.get_by_role(
+        AgentRole.EDITOR.value
+    ).name == "chapter_editor"
+
+    assert registry.get_by_role(
+        AgentRole.REVISER.value
+    ).name == "chapter_reviser"
+
+    assert registry.get_by_role(
+        AgentRole.READER.value
+    ).name == "chapter_reader"
+
+    assert registry.get_by_role(
+        AgentRole.FINALIZER.value
+    ).name == "chapter_finalizer"

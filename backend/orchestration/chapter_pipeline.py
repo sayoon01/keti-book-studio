@@ -1,12 +1,14 @@
-"""챕터 생성 순서(write -> review -> revise)의 단일 소유자.
+"""
+Legacy chapter pipeline.
 
-REST(api/units.py::generate_unit_body)와 채팅 도구(chat/adk_tools.py::generate_chapter_tool)가
-이 함수 하나를 공유한다 — Phase7~10c에서 지켜온 "실행 경로 하나" 원칙을 그대로 유지.
+write → review → revise 시퀀스의 단일 호출 경로다.
+REST(api/units.py)와 채팅 도구(chat/adk_tools)가 이 함수를 공유한다.
+
+새 Production 실행은 ProductionEngine과 StageRunner를 사용한다.
+기존 API 및 테스트 호환성을 위해 일시적으로 유지한다.
 
 주의: 이 파일은 ADK를 쓰지 않는다. write/review/revise 순서는 판단이 아니라
-확정된 시퀀스라서(Reviewer가 "검토 생략" 판단을 할 여지를 주면 안 됨), 그냥
-평범한 Python 함수 호출로 강제하는 게 맞다 — SequentialAgent로 승격하지 않기로
-한 결정은 마법사 경로까지 ADK 세션 오버헤드가 번지는 걸 막기 위함.
+확정된 시퀀스라서 평범한 Python 함수 호출로 강제한다.
 """
 
 from backend.skills.reviewer import review_chapter

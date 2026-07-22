@@ -19,23 +19,22 @@ from backend.publishing.enums import (
 )
 
 
-class WriterAgent(BasePublishingAgent):
+class ReaderAgent(BasePublishingAgent):
     def __init__(
         self,
         llm_service: ChapterLlmService | None = None,
     ) -> None:
         super().__init__(
-            role=AgentRole.WRITER.value,
-            name="chapter_writer",
+            role=AgentRole.READER.value,
+            name="chapter_reader",
             supported_stage_types={
-                ProductionStageType.CHAPTER_WRITING.value,
+                ProductionStageType.CHAPTER_READER_TEST.value,
             },
             required_artifact_types={
-                ProductionArtifactType.CHAPTER_PLAN.value,
-                ProductionArtifactType.RESEARCH_REPORT.value,
+                ProductionArtifactType.REVISED_CHAPTER.value,
             },
             output_artifact_types={
-                ProductionArtifactType.CHAPTER_DRAFT.value,
+                ProductionArtifactType.READER_REPORT.value,
             },
         )
         self.llm_service = llm_service or ChapterLlmService()
@@ -44,40 +43,36 @@ class WriterAgent(BasePublishingAgent):
         self,
         context: AgentContext,
     ) -> AgentResult:
-        plan_artifact = context.require_artifact(
-            ProductionArtifactType.CHAPTER_PLAN
-        )
-        research_artifact = context.require_artifact(
-            ProductionArtifactType.RESEARCH_REPORT
+        revised_artifact = context.require_artifact(
+            ProductionArtifactType.REVISED_CHAPTER
         )
 
-        plan = parse_artifact_content(plan_artifact)
-        research = parse_artifact_content(research_artifact)
-
-        payload = await self.llm_service.write_chapter(
-            plan=plan,
-            research=research,
-            target_reader=context.book.target_reader,
-            writing_style=None,
+        payload = await self.llm_service.test_with_reader(
+            revised=parse_artifact_content(revised_artifact),
+            target_reader=None,
         )
 
-        payload["based_on_plan"] = plan_artifact.artifact_id
-        payload["based_on_research"] = (
-            research_artifact.artifact_id
+        payload["based_on_revised"] = (
+            revised_artifact.artifact_id
         )
 
         return AgentResult.success(
-            summary="챕터 초안을 생성했습니다.",
+            summary="예상 독자 관점 평가를 완료했습니다.",
             artifacts=[
                 AgentArtifact(
                     artifact_type=(
-                        ProductionArtifactType.CHAPTER_DRAFT.value
+                        ProductionArtifactType
+                        .READER_REPORT
+                        .value
                     ),
-                    name=f"{payload['title']} 초안",
+                    name=f"{payload['title']} 독자 평가",
                     content=payload,
                     metadata={
                         "generated_by": self.name,
                     },
                 )
             ],
+            output_data={
+                "satisfaction": payload.get("satisfaction"),
+            },
         )

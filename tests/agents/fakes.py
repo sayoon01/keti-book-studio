@@ -141,3 +141,120 @@ class FakeWriterAgent(
                 )
             ],
         )
+
+
+class FakeResearcherAgent(
+    BasePublishingAgent
+):
+    def __init__(self):
+        super().__init__(
+            role=AgentRole.RESEARCHER.value,
+            name="fake_researcher",
+            supported_stage_types={
+                ProductionStageType
+                .CHAPTER_RESEARCH
+                .value,
+            },
+            required_artifact_types={
+                ProductionArtifactType
+                .CHAPTER_PLAN
+                .value,
+            },
+            output_artifact_types={
+                ProductionArtifactType
+                .RESEARCH_REPORT
+                .value,
+            },
+        )
+
+    async def _run(
+        self,
+        context: AgentContext,
+    ) -> AgentResult:
+        return AgentResult.success(
+            artifacts=[
+                AgentArtifact(
+                    artifact_type=(
+                        ProductionArtifactType
+                        .RESEARCH_REPORT
+                        .value
+                    ),
+                    name="Fake research report",
+                    content={
+                        "summary": "테스트 조사 결과",
+                    },
+                )
+            ],
+            summary="Fake Researcher 실행 완료",
+        )
+
+
+class FakeProductionWriterAgent(
+    BasePublishingAgent
+):
+    def __init__(self):
+        super().__init__(
+            role=AgentRole.WRITER.value,
+            name="fake_production_writer",
+            supported_stage_types={
+                ProductionStageType
+                .CHAPTER_WRITING
+                .value,
+            },
+            required_artifact_types={
+                ProductionArtifactType
+                .CHAPTER_PLAN
+                .value,
+                ProductionArtifactType
+                .RESEARCH_REPORT
+                .value,
+            },
+            output_artifact_types={
+                ProductionArtifactType
+                .CHAPTER_DRAFT
+                .value,
+            },
+        )
+
+    async def _run(
+        self,
+        context: AgentContext,
+    ) -> AgentResult:
+        plan = context.get_latest_artifact(
+            ProductionArtifactType
+            .CHAPTER_PLAN
+            .value
+        )
+
+        research = context.get_latest_artifact(
+            ProductionArtifactType
+            .RESEARCH_REPORT
+            .value
+        )
+
+        return AgentResult.success(
+            artifacts=[
+                AgentArtifact(
+                    artifact_type=(
+                        ProductionArtifactType
+                        .CHAPTER_DRAFT
+                        .value
+                    ),
+                    name="Fake chapter draft",
+                    content={
+                        "plan_id": (
+                            plan.artifact_id
+                            if plan
+                            else None
+                        ),
+                        "research_id": (
+                            research.artifact_id
+                            if research
+                            else None
+                        ),
+                        "markdown": "# 테스트 초안",
+                    },
+                )
+            ],
+            summary="Fake Writer 실행 완료",
+        )

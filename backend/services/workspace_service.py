@@ -46,9 +46,14 @@ class WorkspaceService:
             book_id
         )
 
+        automation_level = (
+            self._resolve_automation_level(config)
+        )
+
         workspace_book = self._build_book_config(
             book=book,
             config=config,
+            automation_level=automation_level,
         )
 
         workspace_unit = None
@@ -81,7 +86,10 @@ class WorkspaceService:
             review_issues=[],
             decisions=[],
             previous_unit_summaries=[],
-            book_policy=self._build_book_policy(config),
+            book_policy=self._build_book_policy(
+                config,
+                automation_level=automation_level,
+            ),
             role_persona={},
             runtime_state={
                 "source_count": len(sources),
@@ -94,6 +102,7 @@ class WorkspaceService:
         *,
         book,
         config,
+        automation_level: str,
     ) -> WorkspaceBookConfig:
         return WorkspaceBookConfig(
             book_id=book.book_id,
@@ -131,11 +140,7 @@ class WorkspaceService:
                 ["language"],
                 default="ko",
             ),
-            automation_level=self._first_value(
-                config,
-                ["approval_mode", "automation_level"],
-                default="BALANCED",
-            ),
+            automation_level=automation_level,
             workflow_type=self._first_value(
                 config,
                 ["workflow_type"],
@@ -335,13 +340,11 @@ class WorkspaceService:
     def _build_book_policy(
         self,
         config,
+        *,
+        automation_level: str,
     ) -> dict[str, Any]:
         return {
-            "automation_level": self._first_value(
-                config,
-                ["approval_mode", "automation_level"],
-                default="BALANCED",
-            ),
+            "automation_level": automation_level,
             "reader_test_policy": (
                 "IMPORTANT_OR_FINAL"
             ),
@@ -352,6 +355,41 @@ class WorkspaceService:
                 "BLACKBOARD_ARTIFACT_MESSAGE"
             ),
         }
+
+    def _resolve_automation_level(
+        self,
+        config: object | None,
+    ) -> str:
+        raw_value = self._first_value(
+            config,
+            ["approval_mode", "automation_level"],
+            default="BALANCED",
+        )
+
+        return self._normalize_automation_level(
+            raw_value,
+        )
+
+    @staticmethod
+    def _normalize_automation_level(
+        value: str | None,
+    ) -> str:
+        normalized = (
+            value or "BALANCED"
+        ).strip().upper()
+
+        aliases = {
+            "AUTO": "AUTO",
+            "AUTOMATIC": "AUTO",
+            "BALANCED": "BALANCED",
+            "SEMI_AUTO": "BALANCED",
+            "MANUAL": "MANUAL",
+        }
+
+        return aliases.get(
+            normalized,
+            "BALANCED",
+        )
 
     def _first_value(
         self,

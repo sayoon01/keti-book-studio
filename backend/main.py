@@ -3,7 +3,7 @@ from sqlmodel import Session
 
 from backend.api import books, chat, chat_v2, config, exports, outlines, personas, sources, traces, units, versions, visuals
 from backend.api.source_library import router as source_library_router
-from backend.storage.database import create_db_and_tables, engine
+from backend.storage.database import engine, init_db
 from backend.storage.persona_seed import seed_system_personas
 
 app = FastAPI(title="KETI Book Studio API", version="0.10.0-phase10c-step3")
@@ -11,7 +11,7 @@ app = FastAPI(title="KETI Book Studio API", version="0.10.0-phase10c-step3")
 
 @app.on_event("startup")
 def on_startup():
-    create_db_and_tables()
+    init_db()
     with Session(engine) as session:
         seed_system_personas(session)
 

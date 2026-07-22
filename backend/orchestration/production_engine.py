@@ -5,7 +5,7 @@ from typing import Any, Protocol
 
 from sqlmodel import Session
 
-from backend.agents.registry import AgentRegistry
+from backend.orchestration.stages.registry import AgentRegistry
 from backend.events.event_publisher import (
     EventPublisher,
 )

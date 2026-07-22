@@ -1,0 +1,35 @@
+{
+  "collection_id": "collection-e4334e7930bc44aaa447bfd0eab91e35",
+  "name": "분석 테스트",
+  "root_name": "Docs",
+  "status": "UPLOADED",
+  "created_at": "2026-07-21T06:33:44.135161",
+  "updated_at": "2026-07-21T06:33:44.175041",
+  "total_files": 2,
+  "supported_files": 2,
+  "skipped_files": 0,
+  "failed_files": 0,
+  "total_size_bytes": 65,
+  "files": [
+    {
+      "node_id": "source-node-a3a4d9cde039422fbf8a21e36ef53863",
+      "relative_path": "Docs/readme.md",
+      "name": "readme.md",
+      "status": "UPLOADED",
+      "size_bytes": 33,
+      "sha256": "98ba5618cd4d2ef6100b9c836f305224dd0f72b60b9bda45b03b59db77a007a0",
+      "document_id": null,
+      "error_message": null
+    },
+    {
+      "node_id": "source-node-9640dbfcb2ac4d40b93c28b36b9a4d21",
+      "relative_path": "Docs/code/sample.py",
+      "name": "sample.py",
+      "status": "UPLOADED",
+      "size_bytes": 32,
+      "sha256": "e642af155ca7061caeb1b32ad04ae178cef8ac3fbb620481f641fb47c0c9e637",
+      "document_id": null,
+      "error_message": null
+    }
+  ]
+}

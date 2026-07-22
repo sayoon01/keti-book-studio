@@ -1,0 +1,35 @@
+{
+  "collection_id": "collection-8bf006b93c9349e2a2412aab42a86bf9",
+  "name": "ADK 자료",
+  "root_name": "ADK자료",
+  "status": "UPLOADED",
+  "created_at": "2026-07-22T02:24:15.516528",
+  "updated_at": "2026-07-22T02:24:15.561992",
+  "total_files": 2,
+  "supported_files": 2,
+  "skipped_files": 0,
+  "failed_files": 0,
+  "total_size_bytes": 21,
+  "files": [
+    {
+      "node_id": "source-node-823473c86508409fa53926cd45b06a30",
+      "relative_path": "ADK자료/공식문서/agent.md",
+      "name": "agent.md",
+      "status": "UPLOADED",
+      "size_bytes": 7,
+      "sha256": "76e7fe34daf5bf1bff903284b4ea9271d58041a8f72b3cc4cef2685a17bba294",
+      "document_id": null,
+      "error_message": null
+    },
+    {
+      "node_id": "source-node-c117646cb44143179fd67d7151a84e46",
+      "relative_path": "ADK자료/실습코드/example.py",
+      "name": "example.py",
+      "status": "UPLOADED",
+      "size_bytes": 14,
+      "sha256": "96f43d529af3430cb6b0e2c02f6b38ef1a121e8a31d2d09a3ebb716f2f35c9de",
+      "document_id": null,
+      "error_message": null
+    }
+  ]
+}

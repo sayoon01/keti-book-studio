@@ -1,0 +1,25 @@
+{
+  "collection_id": "collection-0bf4d3266ab14da4b80fcb0879655b8f",
+  "name": "테스트2",
+  "root_name": "TestFolder",
+  "status": "UPLOADED",
+  "created_at": "2026-07-21T06:37:42.219383",
+  "updated_at": "2026-07-21T06:37:42.266003",
+  "total_files": 1,
+  "supported_files": 1,
+  "skipped_files": 0,
+  "failed_files": 0,
+  "total_size_bytes": 617,
+  "files": [
+    {
+      "node_id": "source-node-e4574c1cfc96415ebf3387969c07f872",
+      "relative_path": "TestFolder/need.md",
+      "name": "need.md",
+      "status": "UPLOADED",
+      "size_bytes": 617,
+      "sha256": "c0cf554bb0a346f37e6c7c5c572d4c6ba4b7503b913bfd85dd76e5ce074db316",
+      "document_id": null,
+      "error_message": null
+    }
+  ]
+}

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from backend.agents.registry import AgentRegistry
+from backend.orchestration.stages.registry import AgentRegistry
 from backend.orchestration.production_engine import (
     ProductionEngine,
 )

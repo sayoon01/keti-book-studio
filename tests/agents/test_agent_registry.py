@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from backend.agents.registry import (
+from backend.orchestration.stages.registry import (
     AgentRegistry,
 )
 from backend.publishing.enums import (

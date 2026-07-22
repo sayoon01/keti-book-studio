@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from sqlmodel import Session
 
-from backend.agents.registry import AgentRegistry
+from backend.orchestration.stages.registry import AgentRegistry
 from backend.orchestration.publishing_agent_registry import (
     build_publishing_agent_registry,
 )

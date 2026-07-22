@@ -1,0 +1,35 @@
+{
+  "collection_id": "collection-9ea40c4c940d4113aac05498beb1dd7f",
+  "name": "Root",
+  "root_name": "Root",
+  "status": "UPLOADED",
+  "created_at": "2026-07-21T06:55:54.885992",
+  "updated_at": "2026-07-21T06:55:54.923455",
+  "total_files": 2,
+  "supported_files": 2,
+  "skipped_files": 0,
+  "failed_files": 0,
+  "total_size_bytes": 2,
+  "files": [
+    {
+      "node_id": "source-node-9bbf4c291c8c4055a863b44d37ed4ffc",
+      "relative_path": "Root/docs/a.md",
+      "name": "a.md",
+      "status": "UPLOADED",
+      "size_bytes": 1,
+      "sha256": "559aead08264d5795d3909718cdd05abd49572e84fe55590eef31a88a08fdffd",
+      "document_id": null,
+      "error_message": null
+    },
+    {
+      "node_id": "source-node-caeb5517b4954170bfc5b03d2d3a438b",
+      "relative_path": "Root/code/b.py",
+      "name": "b.py",
+      "status": "UPLOADED",
+      "size_bytes": 1,
+      "sha256": "df7e70e5021544f4834bbee64a9e3789febc4be81470df629cad6ddb03320a5c",
+      "document_id": null,
+      "error_message": null
+    }
+  ]
+}

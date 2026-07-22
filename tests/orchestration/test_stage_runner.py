@@ -3,12 +3,12 @@ from __future__ import annotations
 import pytest
 from sqlmodel import Session
 
-from backend.agents.context import (
+from backend.orchestration.context import (
     AgentContext,
     AgentContextBook,
     AgentContextRuntime,
 )
-from backend.agents.schemas import AgentResult
+from backend.orchestration.agent_schemas import AgentResult
 from backend.orchestration.stage_runner import (
     StageExecutionFailedError,
     StageNotFoundError,

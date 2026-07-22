@@ -5,10 +5,10 @@ from typing import Any
 
 from sqlmodel import Session
 
-from backend.agents.context import (
+from backend.orchestration.context import (
     AgentContextArtifact,
 )
-from backend.agents.schemas import AgentArtifact
+from backend.orchestration.agent_schemas import AgentArtifact
 from backend.storage.model_utils import (
     json_dumps,
     json_loads,

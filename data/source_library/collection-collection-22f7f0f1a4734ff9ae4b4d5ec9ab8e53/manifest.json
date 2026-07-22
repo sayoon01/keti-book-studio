@@ -1,0 +1,25 @@
+{
+  "collection_id": "collection-22f7f0f1a4734ff9ae4b4d5ec9ab8e53",
+  "name": "테스트 자료",
+  "root_name": "TestFolder",
+  "status": "UPLOADED",
+  "created_at": "2026-07-22T02:02:48.574870",
+  "updated_at": "2026-07-22T02:02:48.585657",
+  "total_files": 1,
+  "supported_files": 1,
+  "skipped_files": 0,
+  "failed_files": 0,
+  "total_size_bytes": 35,
+  "files": [
+    {
+      "node_id": "source-node-a0b6edeaef41479490b4eabe9aa1bbf5",
+      "relative_path": "TestFolder/docs/guide.md",
+      "name": "guide.md",
+      "status": "UPLOADED",
+      "size_bytes": 35,
+      "sha256": "b54a7c89c1636c1a9d60bb589d5ba09b7b194d8a010d6571aec7085ee1515db1",
+      "document_id": null,
+      "error_message": null
+    }
+  ]
+}

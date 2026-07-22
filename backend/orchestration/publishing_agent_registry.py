@@ -1,14 +1,16 @@
 from __future__ import annotations
 
-from backend.agents.editor import EditorAgent
-from backend.agents.finalizer import FinalizerAgent
-from backend.agents.planner import PlannerAgent
-from backend.agents.reader import ReaderAgent
-from backend.agents.registry import AgentRegistry
-from backend.agents.researcher import ResearchAgent
-from backend.agents.reviewer import ReviewerAgent
-from backend.agents.reviser import ReviserAgent
-from backend.agents.writer import WriterAgent
+from backend.orchestration.stages import (
+    AgentRegistry,
+    EditorAgent,
+    FinalizerAgent,
+    PlannerAgent,
+    ReaderAgent,
+    ResearchAgent,
+    ReviewerAgent,
+    ReviserAgent,
+    WriterAgent,
+)
 
 
 def build_publishing_agent_registry() -> AgentRegistry:

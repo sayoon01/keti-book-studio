@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from backend.agents.base import (
+from backend.orchestration.stages.base import (
     BasePublishingAgent,
 )
-from backend.agents.context import (
+from backend.orchestration.context import (
     AgentContext,
 )
-from backend.agents.schemas import (
+from backend.orchestration.agent_schemas import (
     AgentArtifact,
     AgentResult,
 )

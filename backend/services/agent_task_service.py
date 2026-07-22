@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from sqlmodel import Session
 
-from backend.agents.context import AgentContext
-from backend.agents.registry import (
+from backend.orchestration.context import AgentContext
+from backend.orchestration.stages.registry import (
     AgentRegistry,
 )
-from backend.agents.schemas import (
+from backend.orchestration.agent_schemas import (
     AgentExecutionStatus,
     AgentResult,
 )

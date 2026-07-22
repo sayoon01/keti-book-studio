@@ -5,12 +5,12 @@ from typing import Any, Protocol
 
 from sqlmodel import Session
 
-from backend.agents.context import AgentContext
-from backend.agents.context_builder import (
+from backend.orchestration.context import AgentContext
+from backend.orchestration.context_builder import (
     AgentContextBuilder,
 )
-from backend.agents.registry import AgentRegistry
-from backend.agents.schemas import (
+from backend.orchestration.stages.registry import AgentRegistry
+from backend.orchestration.agent_schemas import (
     AgentExecutionStatus,
     AgentResult,
 )

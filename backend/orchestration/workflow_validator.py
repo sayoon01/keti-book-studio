@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from enum import Enum
 
-from backend.agents.registry import AgentRegistry
+from backend.orchestration.stages.registry import AgentRegistry
 from backend.publishing.production_schemas import (
     ProductionStageDefinition,
 )

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from sqlmodel import Session
 
-from backend.agents.schemas import (
+from backend.orchestration.agent_schemas import (
     AgentArtifact,
 )
 from backend.publishing.enums import (

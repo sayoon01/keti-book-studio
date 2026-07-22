@@ -3,10 +3,10 @@ from __future__ import annotations
 import pytest
 from sqlmodel import Session
 
-from backend.agents.context_builder import (
+from backend.orchestration.context_builder import (
     AgentContextBuilder,
 )
-from backend.agents.registry import AgentRegistry
+from backend.orchestration.stages.registry import AgentRegistry
 from backend.orchestration.handoff_manager import (
     HandoffManager,
 )

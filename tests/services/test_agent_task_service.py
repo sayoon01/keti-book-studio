@@ -3,13 +3,13 @@ from __future__ import annotations
 import pytest
 from sqlmodel import Session
 
-from backend.agents.context import (
+from backend.orchestration.context import (
     AgentContext,
     AgentContextBook,
     AgentContextRuntime,
     AgentContextUnit,
 )
-from backend.agents.registry import (
+from backend.orchestration.stages.registry import (
     AgentRegistry,
 )
 from backend.publishing.enums import (

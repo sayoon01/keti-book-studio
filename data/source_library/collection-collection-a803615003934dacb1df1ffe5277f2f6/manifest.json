@@ -1,0 +1,25 @@
+{
+  "collection_id": "collection-a803615003934dacb1df1ffe5277f2f6",
+  "name": "Docs",
+  "root_name": "Docs",
+  "status": "UPLOADED",
+  "created_at": "2026-07-21T06:46:56.705601",
+  "updated_at": "2026-07-21T06:46:56.751132",
+  "total_files": 1,
+  "supported_files": 1,
+  "skipped_files": 0,
+  "failed_files": 0,
+  "total_size_bytes": 5,
+  "files": [
+    {
+      "node_id": "source-node-69c5b37fcb784a39bdc76965088e251b",
+      "relative_path": "Docs/note.md",
+      "name": "note.md",
+      "status": "UPLOADED",
+      "size_bytes": 5,
+      "sha256": "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824",
+      "document_id": null,
+      "error_message": null
+    }
+  ]
+}

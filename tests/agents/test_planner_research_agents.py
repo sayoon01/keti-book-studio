@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from backend.agents.planner import PlannerAgent
-from backend.agents.researcher import ResearchAgent
-from backend.agents.writer import WriterAgent
+from backend.orchestration.stages.planner_stage import PlannerAgent
+from backend.orchestration.stages.researcher_stage import ResearchAgent
+from backend.orchestration.stages.writer_stage import WriterAgent
 from backend.publishing.enums import (
     AgentRole,
     ProductionArtifactType,

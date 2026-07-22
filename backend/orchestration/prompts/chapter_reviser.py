@@ -22,6 +22,8 @@ REVISER_SYSTEM_PROMPT = """
 7. 조사 자료에 없는 사실이나 수치를 새로 만들지 않습니다.
 8. 원문의 좋은 내용은 유지합니다.
 9. 최소 1,500자 이상의 자연스러운 본문을 작성합니다.
+10. applied_changes와 unapplied_changes는 반드시 JSON 배열(list)이어야 합니다.
+   문자열로 쓰지 마세요.
 
 반환 형식:
 

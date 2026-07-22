@@ -62,6 +62,47 @@ class OllamaJsonClient:
         settings: OllamaSettings | None = None,
     ) -> None:
         self.settings = settings or OllamaSettings.from_env()
+        self._verified_models: set[str] = set()
+
+    async def ensure_model_available(
+        self,
+        model: str | None = None,
+    ) -> None:
+        target_model = model or self.settings.model
+
+        if target_model in self._verified_models:
+            return
+
+        tags = await self.health_check()
+
+        models = tags.get("models", [])
+
+        available_models: set[str] = set()
+
+        for item in models:
+            if not isinstance(item, dict):
+                continue
+
+            name = item.get("name")
+            model_name = item.get("model")
+
+            if isinstance(name, str):
+                available_models.add(name)
+
+            if isinstance(model_name, str):
+                available_models.add(model_name)
+
+        if target_model not in available_models:
+            available_text = ", ".join(
+                sorted(available_models)
+            )
+
+            raise OllamaError(
+                f"요청한 Ollama 모델이 없습니다: {target_model}\n"
+                f"사용 가능한 모델: {available_text}"
+            )
+
+        self._verified_models.add(target_model)
 
     async def generate_json(
         self,
@@ -72,6 +113,11 @@ class OllamaJsonClient:
         model: str | None = None,
     ) -> dict[str, Any]:
         request_model = model or self.settings.model
+
+        await self.ensure_model_available(
+            request_model
+        )
+
         request_temperature = (
             self.settings.temperature
             if temperature is None
@@ -94,6 +140,7 @@ class OllamaJsonClient:
             ],
             "options": {
                 "temperature": request_temperature,
+                "num_predict": 8192,
             },
         }
 
@@ -102,6 +149,29 @@ class OllamaJsonClient:
             connect=30.0,
         )
 
+        last_error: Exception | None = None
+
+        for attempt in range(1, 4):
+            try:
+                return await self._request_json_object(
+                    payload=payload,
+                    timeout=timeout,
+                )
+            except OllamaResponseParseError as exc:
+                last_error = exc
+
+                if attempt >= 3:
+                    break
+
+        assert last_error is not None
+        raise last_error
+
+    async def _request_json_object(
+        self,
+        *,
+        payload: dict[str, Any],
+        timeout: httpx.Timeout,
+    ) -> dict[str, Any]:
         try:
             async with httpx.AsyncClient(timeout=timeout) as client:
                 response = await client.post(
@@ -206,10 +276,86 @@ class OllamaJsonClient:
             if isinstance(parsed, dict):
                 return parsed
 
+        # 4. 잘린 JSON 복구 시도
+        if first_brace >= 0:
+            repaired = cls._try_repair_truncated_json(
+                content[first_brace:]
+            )
+
+            if repaired is not None:
+                return repaired
+
         raise OllamaResponseParseError(
             "Ollama 응답에서 JSON 객체를 추출할 수 없습니다.\n"
             f"raw_content={content[:3000]}"
         )
+
+    @classmethod
+    def _try_repair_truncated_json(
+        cls,
+        content: str,
+    ) -> dict[str, Any] | None:
+        candidate = content.rstrip()
+
+        if not candidate.startswith("{"):
+            return None
+
+        suffixes = [
+            '"}',
+            '"\n}',
+            '",\n  "writing_notes": []\n}',
+            '",\n  "applied_changes": []\n}',
+            '"]}',
+            '}}',
+            '"}]',
+            '"}]}\n',
+        ]
+
+        for suffix in suffixes:
+            try:
+                parsed = json.loads(candidate + suffix)
+            except json.JSONDecodeError:
+                continue
+
+            if isinstance(parsed, dict):
+                return parsed
+
+        # 열린 따옴표/괄호를 닫는 단순 복구
+        quote_count = 0
+        escaped = False
+
+        for char in candidate:
+            if escaped:
+                escaped = False
+                continue
+
+            if char == "\\":
+                escaped = True
+                continue
+
+            if char == '"':
+                quote_count += 1
+
+        repaired = candidate
+
+        if quote_count % 2 == 1:
+            repaired += '"'
+
+        open_braces = repaired.count("{") - repaired.count("}")
+        open_brackets = repaired.count("[") - repaired.count("]")
+
+        repaired += "]" * max(open_brackets, 0)
+        repaired += "}" * max(open_braces, 0)
+
+        try:
+            parsed = json.loads(repaired)
+        except json.JSONDecodeError:
+            return None
+
+        if isinstance(parsed, dict):
+            return parsed
+
+        return None
 
     async def health_check(self) -> dict[str, Any]:
         timeout = httpx.Timeout(

@@ -54,6 +54,34 @@ def require_list(
     return value
 
 
+def coerce_list(
+    payload: dict[str, Any],
+    key: str,
+    *,
+    artifact_type: str,
+) -> list[Any]:
+    """LLM이 문자열/누락으로 보낸 list 필드를 정규화한다."""
+    value = payload.get(key)
+
+    if value is None:
+        return []
+
+    if isinstance(value, list):
+        return value
+
+    if isinstance(value, str):
+        text = value.strip()
+        return [text] if text else []
+
+    if isinstance(value, dict):
+        return [value]
+
+    raise ArtifactPayloadValidationError(
+        f"{artifact_type}.{key}는 list여야 합니다. "
+        f"실제 타입={type(value).__name__}"
+    )
+
+
 def normalize_score(
     value: Any,
     *,
@@ -161,13 +189,13 @@ def validate_review_report(
         artifact_type=artifact_type,
     )
 
-    issues = require_list(
+    issues = coerce_list(
         result,
         "issues",
         artifact_type=artifact_type,
     )
 
-    suggestions = require_list(
+    suggestions = coerce_list(
         result,
         "suggestions",
         artifact_type=artifact_type,
@@ -214,7 +242,7 @@ def validate_editorial_decision(
         "style_changes",
         "fact_check_items",
     ):
-        require_list(
+        result[key] = coerce_list(
             result,
             key,
             artifact_type=artifact_type,
@@ -257,9 +285,15 @@ def validate_revised_chapter(
 
     result["markdown"] = markdown
 
-    require_list(
+    result["applied_changes"] = coerce_list(
         result,
         "applied_changes",
+        artifact_type=artifact_type,
+    )
+
+    result["unapplied_changes"] = coerce_list(
+        result,
+        "unapplied_changes",
         artifact_type=artifact_type,
     )
 
@@ -287,13 +321,13 @@ def validate_reader_report(
         artifact_type=artifact_type,
     )
 
-    require_list(
+    result["hard_to_understand"] = coerce_list(
         result,
         "hard_to_understand",
         artifact_type=artifact_type,
     )
 
-    require_list(
+    result["improvements"] = coerce_list(
         result,
         "improvements",
         artifact_type=artifact_type,

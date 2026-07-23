@@ -10,6 +10,9 @@ from backend.generation.handlers.base_text_handler import (
     TextGenerationError,
     TextPromptBundleProtocol,
 )
+from backend.generation.handlers.editor_handler import (
+    EditorHandler,
+)
 from backend.generation.handlers.research_handler import (
     ResearchHandler,
 )
@@ -23,6 +26,7 @@ from backend.generation.handlers.reviser_handler import (
 __all__ = [
     "BaseStructuredHandler",
     "BaseTextHandler",
+    "EditorHandler",
     "PromptBundleProtocol",
     "ResearchHandler",
     "ReviewerHandler",

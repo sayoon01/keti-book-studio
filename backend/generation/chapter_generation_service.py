@@ -7,27 +7,22 @@ from dataclasses import asdict
 from typing import Any
 
 from backend.generation.handlers import (
-    ResearchHandler,
-    ReviewerHandler,
-    ReviserHandler,
-    StructuredGenerationError,
-    TextGenerationError,
+    EditorHandler, ResearchHandler,ReviewerHandler, ReviserHandler,StructuredGenerationError,TextGenerationError,
 )
 from backend.generation.model_router import (
-    GenerationRole,
-    ModelRouter,
+    GenerationRole,  ModelRouter,
 )
 from backend.generation.prompts.chapter_writer import (
     build_chapter_writer_prompts,
 )
+from backend.generation.schemas import (
+    EditorCommand,EditorCommandValidationError,
+)
 from backend.generation.validators.artifact_payloads import (
-    ArtifactPayloadValidationError,
-    ArtifactValidationError,
-    validate_chapter_draft,
+    ArtifactPayloadValidationError,ArtifactValidationError,validate_chapter_draft,
 )
 from backend.infrastructure.llm import (
-    OllamaClient,
-    OllamaClientError,
+    OllamaClient,OllamaClientError,
 )
 
 
@@ -95,6 +90,12 @@ class ChapterGenerationService:
         )
 
         self._reviser_handler = ReviserHandler(
+            client=self._client,
+            model_router=self._model_router,
+            max_attempts=self._max_attempts,
+        )
+
+        self._editor_handler = EditorHandler(
             client=self._client,
             model_router=self._model_router,
             max_attempts=self._max_attempts,
@@ -196,17 +197,36 @@ class ChapterGenerationService:
                     research=research,
                 )
 
+                generation_metadata = {
+                    **asdict(result.metadata),
+                    "response_format": "markdown",
+                    "temperature": writer_config.temperature,
+                    "timeout_seconds": (
+                        writer_config.timeout_seconds
+                    ),
+                    "num_predict": writer_config.num_predict,
+                    "num_ctx": self._writer_num_ctx,
+                    "generation_attempt": generation_attempt,
+                }
+
+                payload = _finalize_writer_draft(
+                    payload=payload,
+                    chapter_id=str(
+                        payload.get("chapter_id", "")
+                    ),
+                    title=str(
+                        payload.get("title", "")
+                    ),
+                    generation_metadata=generation_metadata,
+                )
+
                 validated_payload = validate_chapter_draft(
                     payload,
                     minimum_markdown_length=300,
                 )
 
             except (
-                ArtifactValidationError,
-                ArtifactPayloadValidationError,
-                OllamaClientError,
-                ValueError,
-                TypeError,
+                ArtifactValidationError,ArtifactPayloadValidationError,OllamaClientError,ValueError,TypeError,
             ) as exc:
                 last_error = exc
 
@@ -234,31 +254,25 @@ class ChapterGenerationService:
                 await asyncio.sleep(1)
                 continue
 
-            generation_metadata = {
-                **asdict(result.metadata),
-                "role": GenerationRole.WRITER.value,
-                "response_format": "markdown",
-                "temperature": writer_config.temperature,
-                "timeout_seconds": (
-                    writer_config.timeout_seconds
-                ),
-                "num_predict": writer_config.num_predict,
-                "num_ctx": self._writer_num_ctx,
-                "generation_attempt": generation_attempt,
-            }
-
             logger.info(
                 "Chapter Writer completed: "
                 "model=%s markdown_length=%s "
-                "latency_seconds=%s",
+                "latency_seconds=%s revision=%s",
                 writer_config.model,
                 len(validated_payload["markdown"]),
-                generation_metadata["latency_seconds"],
+                validated_payload["metadata"].get(
+                    "latency_seconds"
+                ),
+                validated_payload["metadata"].get(
+                    "revision"
+                ),
             )
 
             return {
                 **validated_payload,
-                "_generation": generation_metadata,
+                "_generation": dict(
+                    validated_payload["metadata"]
+                ),
             }
 
         raise ChapterGenerationError(
@@ -424,6 +438,62 @@ class ChapterGenerationService:
                 "Revised Chapter Draft 생성에 실패했습니다."
             ) from exc
 
+    async def edit_chapter(
+        self,
+        *,
+        book_config: dict[str, Any],
+        chapter_plan: dict[str, Any],
+        chapter_draft: dict[str, Any] | None = None,
+        editor_command: EditorCommand | dict[str, Any],
+        draft: dict[str, Any] | None = None,
+        research_artifact: dict[str, Any] | None = None,
+        review_artifact: dict[str, Any] | None = None,
+        previous_chapters: list[dict[str, Any]] | None = None,
+        revision_number: int | None = None,
+    ) -> dict[str, Any]:
+        """
+        사용자 편집 명령을 CHAPTER_DRAFT에 적용한다.
+
+        정본 입력:
+        - chapter_draft
+        - editor_command
+
+        하위 호환 입력:
+        - draft
+        """
+
+        resolved_draft = (
+            chapter_draft
+            if chapter_draft is not None
+            else draft
+        )
+
+        if not isinstance(resolved_draft, dict):
+            raise ChapterGenerationError(
+                "edit_chapter에는 "
+                "chapter_draft가 필요합니다."
+            )
+
+        try:
+            return await self._editor_handler.run(
+                book_config=book_config,
+                chapter_plan=chapter_plan,
+                chapter_draft=resolved_draft,
+                editor_command=editor_command,
+                research_artifact=research_artifact,
+                review_artifact=review_artifact,
+                previous_chapters=previous_chapters or [],
+                revision_number=revision_number,
+            )
+
+        except (
+            TextGenerationError,
+            EditorCommandValidationError,
+        ) as exc:
+            raise ChapterGenerationError(
+                "Chapter 편집에 실패했습니다."
+            ) from exc
+
     @staticmethod
     def _validate_inputs(
         *,
@@ -512,6 +582,92 @@ class ChapterGenerationService:
 # 이전 코드에서 ChapterLlmService를 import하고 있을 가능성을 위해
 # 3단계 전까지 임시 호환 Alias를 유지한다.
 ChapterLlmService = ChapterGenerationService
+
+
+# ============================================================
+# Writer / revision helpers
+# ============================================================
+
+
+def _finalize_writer_draft(
+    *,
+    payload: dict[str, Any],
+    chapter_id: str,
+    title: str,
+    generation_metadata: dict[str, Any],
+) -> dict[str, Any]:
+    """
+    Writer가 생성한 CHAPTER_DRAFT에 서버 정본 필드를 적용한다.
+
+    LLM이 반환한 artifact_type, chapter_id, metadata는
+    신뢰하지 않고 서버 값으로 덮어쓴다.
+    """
+
+    finalized = dict(payload)
+
+    finalized["artifact_type"] = "CHAPTER_DRAFT"
+    finalized["chapter_id"] = chapter_id
+    finalized["title"] = (
+        str(finalized.get("title", "")).strip()
+        or title
+    )
+
+    model_metadata = finalized.get("metadata")
+
+    if not isinstance(model_metadata, dict):
+        model_metadata = {}
+
+    finalized["metadata"] = {
+        **model_metadata,
+        **generation_metadata,
+        "role": "writer",
+        "stage": "writer",
+        "revision": 0,
+    }
+
+    return finalized
+
+
+def _get_current_revision(
+    chapter_draft: dict[str, Any],
+) -> int:
+    """
+    CHAPTER_DRAFT의 현재 revision을 반환한다.
+
+    revision이 없으면 Writer 초안으로 간주하여 0을 반환한다.
+    """
+
+    metadata = chapter_draft.get("metadata", {})
+
+    if not isinstance(metadata, dict):
+        return 0
+
+    revision = metadata.get("revision")
+
+    if (
+        isinstance(revision, int)
+        and not isinstance(revision, bool)
+        and revision >= 0
+    ):
+        return revision
+
+    # 이전 버전 Writer Artifact 호환
+    if metadata.get("role") == "writer":
+        return 0
+
+    return 0
+
+
+def _resolve_next_revision(
+    chapter_draft: dict[str, Any],
+) -> int:
+    """
+    다음 CHAPTER_DRAFT revision 번호를 계산한다.
+
+    Writer(0) → Reviser(1) → Editor(2)...
+    """
+
+    return _get_current_revision(chapter_draft) + 1
 
 
 # ============================================================

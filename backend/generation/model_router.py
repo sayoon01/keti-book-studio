@@ -381,15 +381,15 @@ class ModelRouter:
                 role=GenerationRole.EDITOR,
                 model=_read_str_env(
                     "BOOK_STUDIO_EDITOR_MODEL",
-                    "qwen3:32b",
+                    "gemma4:31b",
                 ),
                 temperature=_read_float_env(
                     "BOOK_STUDIO_EDITOR_TEMPERATURE",
-                    0.2,
+                    0.3,
                 ),
                 timeout_seconds=_read_float_env(
                     "BOOK_STUDIO_EDITOR_TIMEOUT_SECONDS",
-                    300.0,
+                    600.0,
                 ),
                 num_predict=_read_int_env(
                     "BOOK_STUDIO_EDITOR_NUM_PREDICT",
@@ -397,9 +397,9 @@ class ModelRouter:
                 ),
                 num_ctx=_read_int_env(
                     "BOOK_STUDIO_EDITOR_NUM_CTX",
-                    8192,
+                    16384,
                 ),
-                response_format="json",
+                response_format="markdown",
                 enabled=_read_bool_env(
                     "BOOK_STUDIO_EDITOR_ENABLED",
                     True,

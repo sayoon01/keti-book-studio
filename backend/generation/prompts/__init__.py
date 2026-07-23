@@ -1,5 +1,7 @@
 from backend.generation.prompts.chapter_editor import (
     EDITOR_SYSTEM_PROMPT,
+    EditorPromptBundle,
+    build_chapter_editor_prompts,
     build_editor_user_prompt,
 )
 from backend.generation.prompts.chapter_finalizer import (
@@ -29,12 +31,14 @@ from backend.generation.prompts.chapter_writer import (
 
 __all__ = [
     "EDITOR_SYSTEM_PROMPT",
+    "EditorPromptBundle",
     "FINALIZER_SYSTEM_PROMPT",
     "READER_SYSTEM_PROMPT",
     "ResearcherPromptBundle",
     "ReviewerPromptBundle",
     "ReviserPromptBundle",
     "WriterPrompts",
+    "build_chapter_editor_prompts",
     "build_chapter_researcher_prompts",
     "build_chapter_reviewer_prompts",
     "build_chapter_reviser_prompts",

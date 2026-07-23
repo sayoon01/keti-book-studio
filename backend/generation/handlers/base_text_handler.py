@@ -181,7 +181,11 @@ class BaseTextHandler(
                         timeout_seconds=(
                             config.timeout_seconds
                         ),
-                        minimum_length=300,
+                        minimum_length=(
+                            self._get_minimum_length(
+                                **inputs
+                            )
+                        ),
                     )
                 )
 
@@ -313,6 +317,19 @@ class BaseTextHandler(
                 cleaned = cleaned[:-3].rstrip()
 
         return cleaned.strip()
+
+    def _get_minimum_length(
+        self,
+        **inputs: Any,
+    ) -> int:
+        """
+        generate_text 최소 길이.
+
+        선택 영역 편집처럼 짧은 출력이 정상적인
+        Handler는 이 값을 오버라이드한다.
+        """
+
+        return 300
 
     def _build_metadata(
         self,

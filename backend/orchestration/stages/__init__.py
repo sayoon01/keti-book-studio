@@ -13,6 +13,7 @@ from backend.orchestration.stages.base import (
 )
 from backend.orchestration.stages.editor_stage import (
     EditorAgent,
+    EditorStage,
 )
 from backend.orchestration.stages.finalizer_stage import (
     FinalizerAgent,
@@ -47,6 +48,7 @@ __all__ = [
     "WriterAgent",
     "ReviewerAgent",
     "EditorAgent",
+    "EditorStage",
     "ReviserAgent",
     "ReaderAgent",
     "FinalizerAgent",

@@ -6,6 +6,9 @@ from typing import Any
 from backend.generation import (
     ChapterGenerationService,
 )
+from backend.generation.chapter_generation_service import (
+    _resolve_next_revision,
+)
 from backend.orchestration.agent_schemas import (
     AgentArtifact,
     AgentResult,
@@ -432,26 +435,11 @@ def _resolve_revision_number(
     )
 
     if isinstance(current_draft, dict):
-        metadata = current_draft.get(
-            "metadata",
-            {},
+        return _resolve_next_revision(
+            current_draft
         )
 
-        if isinstance(metadata, dict):
-            current_revision = metadata.get(
-                "revision"
-            )
-
-            if (
-                isinstance(current_revision, int)
-                and not isinstance(
-                    current_revision,
-                    bool,
-                )
-                and current_revision > 0
-            ):
-                return current_revision + 1
-
+    # draft가 없어도 Writer 이후 첫 Reviser로 간주
     return 1
 
 

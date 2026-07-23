@@ -1,13 +1,7 @@
-from backend.llm.ollama_json_client import (
-    OllamaError,
-    OllamaJsonClient,
-    OllamaResponseParseError,
-    OllamaSettings,
-)
+"""
+Deprecated compatibility package.
 
-__all__ = [
-    "OllamaError",
-    "OllamaJsonClient",
-    "OllamaResponseParseError",
-    "OllamaSettings",
-]
+새 코드는 backend.infrastructure.llm을 사용하세요.
+"""
+
+from backend.infrastructure.llm import *  # noqa: F401,F403

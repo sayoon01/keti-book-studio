@@ -9,8 +9,8 @@ from backend.orchestration.agent_schemas import (
 from backend.orchestration.artifact_content import (
     parse_artifact_content,
 )
-from backend.orchestration.chapter_llm_service import (
-    ChapterLlmService,
+from backend.generation.chapter_generation_service import (
+    ChapterGenerationService,
 )
 from backend.publishing.enums import (
     AgentRole,
@@ -22,7 +22,7 @@ from backend.publishing.enums import (
 class FinalizerAgent(BasePublishingAgent):
     def __init__(
         self,
-        llm_service: ChapterLlmService | None = None,
+        llm_service: ChapterGenerationService | None = None,
     ) -> None:
         super().__init__(
             role=AgentRole.FINALIZER.value,
@@ -38,7 +38,7 @@ class FinalizerAgent(BasePublishingAgent):
                 ProductionArtifactType.FINAL_CHAPTER.value,
             },
         )
-        self.llm_service = llm_service or ChapterLlmService()
+        self.llm_service = llm_service or ChapterGenerationService()
 
     async def _run(
         self,

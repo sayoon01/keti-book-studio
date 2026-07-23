@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import logging
 from typing import Any
 
-from backend.generation.handlers.structured_json_handler import (
-    StructuredJsonHandler,
-    metadata_to_dict,
+from backend.generation.handlers.base_structured_handler import (
+    BaseStructuredHandler,
+    PromptBundleProtocol,
+    StructuredExecutionContext,
 )
 from backend.generation.model_router import (
     GenerationRole,
@@ -19,13 +21,24 @@ from backend.generation.validators import (
 from backend.infrastructure.llm import OllamaClient
 
 
-class ReviewerHandler:
-    """
-    일반 Reviewer 역할 전용 Handler.
+logger = logging.getLogger(__name__)
 
-    기술 리뷰가 필요한지 판단하는 책임은
-    ChapterGenerationService 또는 이후 Review Orchestrator가 담당한다.
+
+class ReviewerHandler(
+    BaseStructuredHandler[dict[str, Any]]
+):
     """
+    Reviewer 역할 전용 Handler.
+
+    본문을 직접 수정하지 않고
+    REVIEW_ARTIFACT를 생성한다.
+    """
+
+    role = GenerationRole.REVIEWER
+    operation_name = "Chapter Reviewer"
+    validator = staticmethod(
+        validate_review_artifact
+    )
 
     def __init__(
         self,
@@ -34,8 +47,7 @@ class ReviewerHandler:
         model_router: ModelRouter,
         max_attempts: int,
     ) -> None:
-        self._generator = StructuredJsonHandler(
-            role=GenerationRole.REVIEWER,
+        super().__init__(
             client=client,
             model_router=model_router,
             max_attempts=max_attempts,
@@ -50,12 +62,11 @@ class ReviewerHandler:
         chapter_draft: dict[str, Any],
         previous_chapters: list[dict[str, Any]],
     ) -> dict[str, Any]:
-        _validate_input_artifacts(
-            research_artifact=research_artifact,
-            chapter_draft=chapter_draft,
-        )
+        """
+        CHAPTER_DRAFT를 검토하여 REVIEW_ARTIFACT를 생성한다.
+        """
 
-        prompts = build_chapter_reviewer_prompts(
+        return await self._execute(
             book_config=book_config,
             chapter_plan=chapter_plan,
             research_artifact=research_artifact,
@@ -63,9 +74,153 @@ class ReviewerHandler:
             previous_chapters=previous_chapters,
         )
 
-        chapter_id = _get_chapter_id(
-            chapter_plan,
-            chapter_draft,
+    def _validate_inputs(
+        self,
+        **inputs: Any,
+    ) -> None:
+        book_config = inputs.get("book_config")
+        chapter_plan = inputs.get("chapter_plan")
+        research_artifact = inputs.get(
+            "research_artifact"
+        )
+        chapter_draft = inputs.get(
+            "chapter_draft"
+        )
+        previous_chapters = inputs.get(
+            "previous_chapters"
+        )
+
+        if not isinstance(book_config, dict):
+            raise TypeError(
+                "book_config는 dictionary여야 합니다."
+            )
+
+        if not isinstance(chapter_plan, dict):
+            raise TypeError(
+                "chapter_plan은 dictionary여야 합니다."
+            )
+
+        if not isinstance(
+            research_artifact,
+            dict,
+        ):
+            raise TypeError(
+                "research_artifact는 "
+                "dictionary여야 합니다."
+            )
+
+        if not isinstance(chapter_draft, dict):
+            raise TypeError(
+                "chapter_draft는 dictionary여야 합니다."
+            )
+
+        if not isinstance(
+            previous_chapters,
+            list,
+        ):
+            raise TypeError(
+                "previous_chapters는 list여야 합니다."
+            )
+
+        research_type = str(
+            research_artifact.get(
+                "artifact_type",
+                "",
+            )
+        ).strip()
+
+        if research_type != "RESEARCH_ARTIFACT":
+            raise ValueError(
+                "Reviewer에는 정본 RESEARCH_ARTIFACT가 "
+                "필요합니다. "
+                f"actual={research_type!r}"
+            )
+
+        draft_type = str(
+            chapter_draft.get(
+                "artifact_type",
+                "",
+            )
+        ).strip()
+
+        if draft_type != "CHAPTER_DRAFT":
+            raise ValueError(
+                "Reviewer에는 CHAPTER_DRAFT가 필요합니다. "
+                f"actual={draft_type!r}"
+            )
+
+        research_chapter_id = _get_chapter_id(
+            research_artifact
+        )
+
+        draft_chapter_id = _get_chapter_id(
+            chapter_draft
+        )
+
+        plan_chapter_id = _get_chapter_id(
+            chapter_plan
+        )
+
+        if not draft_chapter_id:
+            raise ValueError(
+                "chapter_draft에 chapter_id가 필요합니다."
+            )
+
+        if (
+            research_chapter_id
+            and research_chapter_id
+            != draft_chapter_id
+        ):
+            raise ValueError(
+                "Research Artifact와 Chapter Draft의 "
+                "chapter_id가 일치하지 않습니다. "
+                f"research={research_chapter_id!r}, "
+                f"draft={draft_chapter_id!r}"
+            )
+
+        if (
+            plan_chapter_id
+            and plan_chapter_id
+            != draft_chapter_id
+        ):
+            raise ValueError(
+                "Chapter Plan과 Chapter Draft의 "
+                "chapter_id가 일치하지 않습니다. "
+                f"plan={plan_chapter_id!r}, "
+                f"draft={draft_chapter_id!r}"
+            )
+
+    def _build_prompts(
+        self,
+        **inputs: Any,
+    ) -> PromptBundleProtocol:
+        return build_chapter_reviewer_prompts(
+            book_config=inputs["book_config"],
+            chapter_plan=inputs["chapter_plan"],
+            research_artifact=(
+                inputs["research_artifact"]
+            ),
+            chapter_draft=(
+                inputs["chapter_draft"]
+            ),
+            previous_chapters=(
+                inputs["previous_chapters"]
+            ),
+        )
+
+    def _enrich_payload(
+        self,
+        *,
+        payload: dict[str, Any],
+        execution_context: StructuredExecutionContext,
+        **inputs: Any,
+    ) -> dict[str, Any]:
+        chapter_plan = inputs["chapter_plan"]
+        chapter_draft = inputs["chapter_draft"]
+
+        chapter_id = (
+            _get_chapter_id(chapter_draft)
+            or _get_chapter_id(chapter_plan)
         )
 
         chapter_title = str(
@@ -74,87 +229,49 @@ class ReviewerHandler:
             or ""
         ).strip()
 
-        def enrich_payload(
-            payload: dict[str, Any],
-            metadata: Any,
-            attempt: int,
-        ) -> dict[str, Any]:
-            result = dict(payload)
+        result = dict(payload)
 
-            result["chapter_id"] = chapter_id
+        # LLM 출력보다 파이프라인 입력 Artifact의 ID가 우선이다.
+        result["chapter_id"] = chapter_id
 
-            if not str(
-                result.get("title", "")
-            ).strip():
-                result["title"] = chapter_title
+        if not str(
+            result.get("title", "")
+        ).strip():
+            result["title"] = chapter_title
 
-            result["metadata"] = {
-                **metadata_to_dict(metadata),
-                "role": GenerationRole.REVIEWER.value,
-                "response_format": "json",
-                "attempt": attempt,
-            }
-
-            return result
-
-        return await self._generator.generate(
-            system_prompt=prompts.system_prompt,
-            user_prompt=prompts.user_prompt,
-            validator=validate_review_artifact,
-            enrich_payload=enrich_payload,
-            operation_name="Chapter Reviewer",
+        result["metadata"] = self._build_metadata(
+            execution_context
         )
 
+        return result
 
-def _validate_input_artifacts(
-    *,
-    research_artifact: dict[str, Any],
-    chapter_draft: dict[str, Any],
-) -> None:
-    research_type = str(
-        research_artifact.get(
-            "artifact_type",
-            "",
-        )
-    ).strip()
-
-    if research_type != "RESEARCH_ARTIFACT":
-        raise ValueError(
-            "Reviewer에는 정본 RESEARCH_ARTIFACT가 필요합니다. "
-            f"actual={research_type!r}"
-        )
-
-    draft_type = str(
-        chapter_draft.get(
-            "artifact_type",
-            "",
-        )
-    ).strip()
-
-    if draft_type != "CHAPTER_DRAFT":
-        raise ValueError(
-            "Reviewer에는 CHAPTER_DRAFT가 필요합니다. "
-            f"actual={draft_type!r}"
+    def _log_completion(
+        self,
+        *,
+        artifact: dict[str, Any],
+        execution_context: StructuredExecutionContext,
+    ) -> None:
+        logger.info(
+            "%s completed: chapter_id=%s model=%s "
+            "attempt=%s score=%s verdict=%s issues=%s",
+            self.operation_name,
+            artifact.get("chapter_id"),
+            execution_context.model,
+            execution_context.attempt,
+            artifact.get("overall_score"),
+            artifact.get("verdict"),
+            len(artifact.get("issues", [])),
         )
 
 
 def _get_chapter_id(
-    chapter_plan: dict[str, Any],
-    chapter_draft: dict[str, Any],
+    payload: dict[str, Any],
 ) -> str:
     value = (
-        chapter_draft.get("chapter_id")
-        or chapter_plan.get("chapter_id")
-        or chapter_plan.get("unit_id")
-        or chapter_plan.get("id")
+        payload.get("chapter_id")
+        or payload.get("unit_id")
+        or payload.get("id")
         or ""
     )
 
-    normalized = str(value).strip()
-
-    if not normalized:
-        raise ValueError(
-            "Reviewer 입력에 chapter_id가 필요합니다."
-        )
-
-    return normalized
+    return str(value).strip()

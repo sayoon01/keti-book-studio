@@ -9,7 +9,9 @@ from typing import Any
 from backend.generation.handlers import (
     ResearchHandler,
     ReviewerHandler,
+    ReviserHandler,
     StructuredGenerationError,
+    TextGenerationError,
 )
 from backend.generation.model_router import (
     GenerationRole,
@@ -87,6 +89,12 @@ class ChapterGenerationService:
         )
 
         self._reviewer_handler = ReviewerHandler(
+            client=self._client,
+            model_router=self._model_router,
+            max_attempts=self._max_attempts,
+        )
+
+        self._reviser_handler = ReviserHandler(
             client=self._client,
             model_router=self._model_router,
             max_attempts=self._max_attempts,
@@ -326,6 +334,96 @@ class ChapterGenerationService:
                 "Review Artifact 생성에 실패했습니다."
             ) from exc
 
+    async def revise_chapter(
+        self,
+        *,
+        book_config: dict[str, Any],
+        chapter_plan: dict[str, Any],
+        research_artifact: dict[str, Any] | None = None,
+        chapter_draft: dict[str, Any] | None = None,
+        review_artifact: dict[str, Any] | None = None,
+        research: dict[str, Any] | None = None,
+        draft: dict[str, Any] | None = None,
+        review: dict[str, Any] | None = None,
+        previous_chapters: list[dict[str, Any]] | None = None,
+        revision_number: int = 1,
+    ) -> dict[str, Any]:
+        """
+        Reviewer의 수정 지침을 반영하여
+        새로운 CHAPTER_DRAFT를 생성한다.
+
+        정본 인자:
+        - research_artifact
+        - chapter_draft
+        - review_artifact
+
+        임시 하위 호환 인자:
+        - research
+        - draft
+        - review
+        """
+
+        resolved_research = (
+            research_artifact
+            if research_artifact is not None
+            else research
+        )
+
+        resolved_draft = (
+            chapter_draft
+            if chapter_draft is not None
+            else draft
+        )
+
+        resolved_review = (
+            review_artifact
+            if review_artifact is not None
+            else review
+        )
+
+        if not isinstance(resolved_research, dict):
+            raise ChapterGenerationError(
+                "revise_chapter에는 "
+                "research_artifact가 필요합니다."
+            )
+
+        if not isinstance(resolved_draft, dict):
+            raise ChapterGenerationError(
+                "revise_chapter에는 "
+                "chapter_draft가 필요합니다."
+            )
+
+        if not isinstance(resolved_review, dict):
+            raise ChapterGenerationError(
+                "revise_chapter에는 "
+                "review_artifact가 필요합니다."
+            )
+
+        if (
+            not isinstance(revision_number, int)
+            or isinstance(revision_number, bool)
+            or revision_number <= 0
+        ):
+            raise ChapterGenerationError(
+                "revision_number는 1 이상의 정수여야 합니다."
+            )
+
+        try:
+            return await self._reviser_handler.run(
+                book_config=book_config,
+                chapter_plan=chapter_plan,
+                research_artifact=resolved_research,
+                chapter_draft=resolved_draft,
+                review_artifact=resolved_review,
+                previous_chapters=previous_chapters or [],
+                revision_number=revision_number,
+            )
+
+        except TextGenerationError as exc:
+            raise ChapterGenerationError(
+                "Revised Chapter Draft 생성에 실패했습니다."
+            ) from exc
+
     @staticmethod
     def _validate_inputs(
         *,
@@ -419,39 +517,6 @@ ChapterLlmService = ChapterGenerationService
 # ============================================================
 # Payload helpers
 # ============================================================
-
-
-def _metadata_to_dict(
-    metadata: Any,
-) -> dict[str, Any]:
-    """
-    OllamaGenerationMetadata를 dictionary로 변환한다.
-    """
-
-    return {
-        "model": getattr(metadata, "model", ""),
-        "attempts": getattr(metadata, "attempts", 1),
-        "latency_seconds": getattr(
-            metadata,
-            "latency_seconds",
-            0.0,
-        ),
-        "done_reason": getattr(
-            metadata,
-            "done_reason",
-            None,
-        ),
-        "prompt_eval_count": getattr(
-            metadata,
-            "prompt_eval_count",
-            None,
-        ),
-        "eval_count": getattr(
-            metadata,
-            "eval_count",
-            None,
-        ),
-    }
 
 
 def _resolve_title(

@@ -19,8 +19,8 @@ from backend.generation.prompts.chapter_reviewer import (
     build_chapter_reviewer_prompts,
 )
 from backend.generation.prompts.chapter_reviser import (
-    REVISER_SYSTEM_PROMPT,
-    build_reviser_user_prompt,
+    ReviserPromptBundle,
+    build_chapter_reviser_prompts,
 )
 from backend.generation.prompts.chapter_writer import (
     WriterPrompts,
@@ -31,15 +31,15 @@ __all__ = [
     "EDITOR_SYSTEM_PROMPT",
     "FINALIZER_SYSTEM_PROMPT",
     "READER_SYSTEM_PROMPT",
-    "REVISER_SYSTEM_PROMPT",
     "ResearcherPromptBundle",
     "ReviewerPromptBundle",
+    "ReviserPromptBundle",
     "WriterPrompts",
     "build_chapter_researcher_prompts",
     "build_chapter_reviewer_prompts",
+    "build_chapter_reviser_prompts",
     "build_chapter_writer_prompts",
     "build_editor_user_prompt",
     "build_finalizer_user_prompt",
     "build_reader_user_prompt",
-    "build_reviser_user_prompt",
 ]

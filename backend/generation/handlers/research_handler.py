@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import logging
 from typing import Any
 
-from backend.generation.handlers.structured_json_handler import (
-    StructuredJsonHandler,
-    metadata_to_dict,
+from backend.generation.handlers.base_structured_handler import (
+    BaseStructuredHandler,
+    PromptBundleProtocol,
+    StructuredExecutionContext,
 )
 from backend.generation.model_router import (
     GenerationRole,
@@ -19,10 +21,23 @@ from backend.generation.validators import (
 from backend.infrastructure.llm import OllamaClient
 
 
-class ResearchHandler:
+logger = logging.getLogger(__name__)
+
+
+class ResearchHandler(
+    BaseStructuredHandler[dict[str, Any]]
+):
     """
-    Researcher 역할 전용 Generation Handler.
+    Researcher 역할 전용 Handler.
+
+    공통 JSON 생성 과정은 BaseStructuredHandler가 담당한다.
     """
+
+    role = GenerationRole.RESEARCHER
+    operation_name = "Chapter Researcher"
+    validator = staticmethod(
+        validate_research_artifact
+    )
 
     def __init__(
         self,
@@ -31,8 +46,7 @@ class ResearchHandler:
         model_router: ModelRouter,
         max_attempts: int,
     ) -> None:
-        self._generator = StructuredJsonHandler(
-            role=GenerationRole.RESEARCHER,
+        super().__init__(
             client=client,
             model_router=model_router,
             max_attempts=max_attempts,
@@ -46,12 +60,77 @@ class ResearchHandler:
         sources: list[dict[str, Any]],
         previous_chapters: list[dict[str, Any]],
     ) -> dict[str, Any]:
-        prompts = build_chapter_researcher_prompts(
+        """
+        Writer가 사용할 RESEARCH_ARTIFACT를 생성한다.
+        """
+
+        return await self._execute(
             book_config=book_config,
             chapter_plan=chapter_plan,
             sources=sources,
             previous_chapters=previous_chapters,
         )
+
+    def _validate_inputs(
+        self,
+        **inputs: Any,
+    ) -> None:
+        book_config = inputs.get("book_config")
+        chapter_plan = inputs.get("chapter_plan")
+        sources = inputs.get("sources")
+        previous_chapters = inputs.get(
+            "previous_chapters"
+        )
+
+        if not isinstance(book_config, dict):
+            raise TypeError(
+                "book_config는 dictionary여야 합니다."
+            )
+
+        if not isinstance(chapter_plan, dict):
+            raise TypeError(
+                "chapter_plan은 dictionary여야 합니다."
+            )
+
+        if not _get_chapter_id(chapter_plan):
+            raise ValueError(
+                "chapter_plan에 chapter_id가 필요합니다."
+            )
+
+        if not isinstance(sources, list):
+            raise TypeError(
+                "sources는 list여야 합니다."
+            )
+
+        if not isinstance(
+            previous_chapters,
+            list,
+        ):
+            raise TypeError(
+                "previous_chapters는 list여야 합니다."
+            )
+
+    def _build_prompts(
+        self,
+        **inputs: Any,
+    ) -> PromptBundleProtocol:
+        return build_chapter_researcher_prompts(
+            book_config=inputs["book_config"],
+            chapter_plan=inputs["chapter_plan"],
+            sources=inputs["sources"],
+            previous_chapters=(
+                inputs["previous_chapters"]
+            ),
+        )
+
+    def _enrich_payload(
+        self,
+        *,
+        payload: dict[str, Any],
+        execution_context: StructuredExecutionContext,
+        **inputs: Any,
+    ) -> dict[str, Any]:
+        chapter_plan = inputs["chapter_plan"]
 
         chapter_id = _get_chapter_id(
             chapter_plan
@@ -61,37 +140,37 @@ class ResearchHandler:
             chapter_plan.get("title", "")
         ).strip()
 
-        def enrich_payload(
-            payload: dict[str, Any],
-            metadata: Any,
-            attempt: int,
-        ) -> dict[str, Any]:
-            result = dict(payload)
+        result = dict(payload)
 
-            # LLM이 다른 chapter_id를 출력해도
-            # 파이프라인 입력값을 정본으로 사용한다.
-            result["chapter_id"] = chapter_id
+        # LLM이 다른 ID를 생성해도 입력 Plan의 ID를 정본으로 사용한다.
+        result["chapter_id"] = chapter_id
 
-            if not str(
-                result.get("title", "")
-            ).strip():
-                result["title"] = chapter_title
+        if not str(
+            result.get("title", "")
+        ).strip():
+            result["title"] = chapter_title
 
-            result["metadata"] = {
-                **metadata_to_dict(metadata),
-                "role": GenerationRole.RESEARCHER.value,
-                "response_format": "json",
-                "attempt": attempt,
-            }
+        result["metadata"] = self._build_metadata(
+            execution_context
+        )
 
-            return result
+        return result
 
-        return await self._generator.generate(
-            system_prompt=prompts.system_prompt,
-            user_prompt=prompts.user_prompt,
-            validator=validate_research_artifact,
-            enrich_payload=enrich_payload,
-            operation_name="Chapter Researcher",
+    def _log_completion(
+        self,
+        *,
+        artifact: dict[str, Any],
+        execution_context: StructuredExecutionContext,
+    ) -> None:
+        logger.info(
+            "%s completed: chapter_id=%s model=%s "
+            "attempt=%s findings=%s evidence=%s",
+            self.operation_name,
+            artifact.get("chapter_id"),
+            execution_context.model,
+            execution_context.attempt,
+            len(artifact.get("findings", [])),
+            len(artifact.get("evidence", [])),
         )
 
 
@@ -105,11 +184,4 @@ def _get_chapter_id(
         or ""
     )
 
-    normalized = str(value).strip()
-
-    if not normalized:
-        raise ValueError(
-            "chapter_plan에 chapter_id가 필요합니다."
-        )
-
-    return normalized
+    return str(value).strip()

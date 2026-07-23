@@ -34,5 +34,5 @@ def test_chapter_generation_service_accepts_dependencies():
         )
 
     assert service is not None
-    assert service.client is client
-    assert service.model_router is router
+    assert service._client is client
+    assert service._model_router is router

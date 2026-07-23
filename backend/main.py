@@ -1,10 +1,13 @@
 from fastapi import FastAPI
 from sqlmodel import Session
+from dotenv import load_dotenv
 
 from backend.api import books, chat, chat_v2, config, exports, outlines, personas, sources, traces, units, versions, visuals
 from backend.api.source_library import router as source_library_router
 from backend.storage.database import engine, init_db
 from backend.storage.persona_seed import seed_system_personas
+
+load_dotenv()
 
 app = FastAPI(title="KETI Book Studio API", version="0.10.0-phase10c-step3")
 

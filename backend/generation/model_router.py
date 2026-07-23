@@ -2,266 +2,566 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from enum import StrEnum
+from enum import Enum
 
 
-class GenerationRole(StrEnum):
-    PLANNER = "planner"
+class GenerationRole(str, Enum):
+    """
+    Book Studio Generation Engine에서 사용하는 역할.
+
+    각 역할은 ModelRouter를 통해 자신에게 맞는
+    모델과 생성 설정을 전달받는다.
+    """
+
     RESEARCHER = "researcher"
+    PLANNER = "planner"
     WRITER = "writer"
     REVIEWER = "reviewer"
+    TECHNICAL_REVIEWER = "technical_reviewer"
     EDITOR = "editor"
     REVISER = "reviser"
     READER = "reader"
-    FINALIZER = "finalizer"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class RoleModelConfig:
+    """
+    하나의 Generation Role이 사용할 모델 설정.
+
+    Attributes:
+        role:
+            Researcher, Writer, Reviewer 등의 역할.
+
+        model:
+            Ollama에 등록된 모델 이름.
+
+        temperature:
+            생성 다양성 설정.
+
+        timeout_seconds:
+            해당 역할의 Ollama 요청 제한 시간.
+
+        num_predict:
+            최대 출력 토큰 수.
+
+        num_ctx:
+            Ollama Context 크기.
+
+        response_format:
+            json 또는 markdown.
+
+        enabled:
+            해당 역할 사용 여부.
+    """
+
     role: GenerationRole
     model: str
     temperature: float
     timeout_seconds: float
+    num_predict: int
+    num_ctx: int
+    response_format: str
+    enabled: bool = True
 
 
 class ModelRouter:
     """
-    Generation 역할별 모델 설정을 반환합니다.
+    역할에 따라 적절한 Ollama 모델 설정을 반환한다.
 
-    역할별 환경변수가 없으면 BOOK_STUDIO_MODEL을 사용합니다.
-    따라서 처음에는 모든 역할이 같은 모델을 사용해도 되며,
-    이후 환경변수만으로 Writer와 Reviewer 모델을 분리할 수 있습니다.
+    Generation Service는 모델 이름을 직접 결정하지 않고
+    반드시 ModelRouter를 통해 설정을 조회한다.
+
+    Example:
+        router = ModelRouter()
+
+        writer_config = router.get_config(
+            GenerationRole.WRITER
+        )
+
+        print(writer_config.model)
+        # gemma4:31b
     """
 
-    DEFAULT_MODEL = "gemma4-31b-32k:latest"
-    DEFAULT_TIMEOUT_SECONDS = 600.0
-
-    DEFAULT_TEMPERATURES: dict[
-        GenerationRole,
-        float,
-    ] = {
-        GenerationRole.PLANNER: 0.3,
-        GenerationRole.RESEARCHER: 0.1,
-        GenerationRole.WRITER: 0.5,
-        GenerationRole.REVIEWER: 0.1,
-        GenerationRole.EDITOR: 0.2,
-        GenerationRole.REVISER: 0.35,
-        GenerationRole.READER: 0.2,
-        GenerationRole.FINALIZER: 0.25,
-    }
-
-    ENVIRONMENT_VARIABLES: dict[
-        GenerationRole,
-        str,
-    ] = {
-        GenerationRole.PLANNER: (
-            "BOOK_STUDIO_PLANNER_MODEL"
-        ),
-        GenerationRole.RESEARCHER: (
-            "BOOK_STUDIO_RESEARCHER_MODEL"
-        ),
-        GenerationRole.WRITER: (
-            "BOOK_STUDIO_WRITER_MODEL"
-        ),
-        GenerationRole.REVIEWER: (
-            "BOOK_STUDIO_REVIEWER_MODEL"
-        ),
-        GenerationRole.EDITOR: (
-            "BOOK_STUDIO_EDITOR_MODEL"
-        ),
-        GenerationRole.REVISER: (
-            "BOOK_STUDIO_REVISER_MODEL"
-        ),
-        GenerationRole.READER: (
-            "BOOK_STUDIO_READER_MODEL"
-        ),
-        GenerationRole.FINALIZER: (
-            "BOOK_STUDIO_FINALIZER_MODEL"
-        ),
-    }
-
-    TEMPERATURE_VARIABLES: dict[
-        GenerationRole,
-        str,
-    ] = {
-        GenerationRole.PLANNER: (
-            "BOOK_STUDIO_PLANNER_TEMPERATURE"
-        ),
-        GenerationRole.RESEARCHER: (
-            "BOOK_STUDIO_RESEARCHER_TEMPERATURE"
-        ),
-        GenerationRole.WRITER: (
-            "BOOK_STUDIO_WRITER_TEMPERATURE"
-        ),
-        GenerationRole.REVIEWER: (
-            "BOOK_STUDIO_REVIEWER_TEMPERATURE"
-        ),
-        GenerationRole.EDITOR: (
-            "BOOK_STUDIO_EDITOR_TEMPERATURE"
-        ),
-        GenerationRole.REVISER: (
-            "BOOK_STUDIO_REVISER_TEMPERATURE"
-        ),
-        GenerationRole.READER: (
-            "BOOK_STUDIO_READER_TEMPERATURE"
-        ),
-        GenerationRole.FINALIZER: (
-            "BOOK_STUDIO_FINALIZER_TEMPERATURE"
-        ),
-    }
+    def __init__(self) -> None:
+        self._configs = self._build_configs()
 
     def get_config(
         self,
-        role: GenerationRole | str,
+        role: GenerationRole,
     ) -> RoleModelConfig:
-        resolved_role = self._resolve_role(role)
+        """
+        역할에 해당하는 모델 설정을 반환한다.
+        """
 
-        default_model = os.getenv(
-            "BOOK_STUDIO_MODEL",
-            self.DEFAULT_MODEL,
-        ).strip()
-
-        role_variable = self.ENVIRONMENT_VARIABLES[
-            resolved_role
-        ]
-
-        model = os.getenv(
-            role_variable,
-            default_model,
-        ).strip()
-
-        if not model:
-            raise ValueError(
-                "LLM 모델명이 비어 있습니다. "
-                f"role={resolved_role.value}, "
-                f"environment_variable={role_variable}"
+        if not isinstance(role, GenerationRole):
+            raise TypeError(
+                "role은 GenerationRole이어야 합니다. "
+                f"actual={type(role).__name__}"
             )
 
-        temperature = self._read_temperature(
-            resolved_role
-        )
+        config = self._configs.get(role)
 
-        timeout_seconds = self._read_float(
-            variable_name=(
-                "OLLAMA_TIMEOUT_SECONDS"
-            ),
-            default=self.DEFAULT_TIMEOUT_SECONDS,
-            minimum=1.0,
-            maximum=3600.0,
-        )
+        if config is None:
+            raise KeyError(
+                "등록되지 않은 Generation Role입니다. "
+                f"role={role.value}"
+            )
 
-        return RoleModelConfig(
-            role=resolved_role,
-            model=model,
-            temperature=temperature,
-            timeout_seconds=timeout_seconds,
-        )
+        if not config.enabled:
+            raise RuntimeError(
+                "현재 비활성화된 Generation Role입니다. "
+                f"role={role.value}"
+            )
 
-    def get_all_configs(
-        self,
-    ) -> dict[GenerationRole, RoleModelConfig]:
-        return {
-            role: self.get_config(role)
-            for role in GenerationRole
-        }
+        return config
 
-    def _read_temperature(
+    def get_model(
         self,
         role: GenerationRole,
-    ) -> float:
-        role_variable = (
-            self.TEMPERATURE_VARIABLES[role]
-        )
+    ) -> str:
+        """
+        역할에 연결된 모델 이름만 반환한다.
+        """
 
-        role_value = os.getenv(role_variable)
+        return self.get_config(role).model
 
-        if role_value is not None:
-            return self._parse_float(
-                variable_name=role_variable,
-                raw_value=role_value,
-                minimum=0.0,
-                maximum=2.0,
-            )
-
-        common_value = os.getenv(
-            "BOOK_STUDIO_TEMPERATURE"
-        )
-
-        if common_value is not None:
-            return self._parse_float(
-                variable_name=(
-                    "BOOK_STUDIO_TEMPERATURE"
-                ),
-                raw_value=common_value,
-                minimum=0.0,
-                maximum=2.0,
-            )
-
-        return self.DEFAULT_TEMPERATURES[role]
-
-    @staticmethod
-    def _resolve_role(
-        role: GenerationRole | str,
-    ) -> GenerationRole:
-        if isinstance(role, GenerationRole):
-            return role
-
-        try:
-            return GenerationRole(
-                str(role).strip().lower()
-            )
-        except ValueError as exc:
-            valid_roles = ", ".join(
-                item.value
-                for item in GenerationRole
-            )
-
-            raise ValueError(
-                f"지원하지 않는 Generation 역할입니다: {role}. "
-                f"가능한 값: {valid_roles}"
-            ) from exc
-
-    def _read_float(
+    def is_enabled(
         self,
-        *,
-        variable_name: str,
-        default: float,
-        minimum: float,
-        maximum: float,
-    ) -> float:
-        raw_value = os.getenv(variable_name)
+        role: GenerationRole,
+    ) -> bool:
+        """
+        해당 역할의 활성화 여부를 반환한다.
+        """
 
-        if raw_value is None:
-            return default
+        config = self._configs.get(role)
 
-        return self._parse_float(
-            variable_name=variable_name,
-            raw_value=raw_value,
-            minimum=minimum,
-            maximum=maximum,
-        )
+        if config is None:
+            return False
+
+        return config.enabled
+
+    def list_configs(
+        self,
+    ) -> list[RoleModelConfig]:
+        """
+        모든 역할별 설정을 목록으로 반환한다.
+        """
+
+        return list(self._configs.values())
+
+    def as_dict(
+        self,
+    ) -> dict[str, dict[str, object]]:
+        """
+        API 응답이나 디버깅에 사용할 수 있는
+        dictionary 형식으로 반환한다.
+        """
+
+        result: dict[str, dict[str, object]] = {}
+
+        for role, config in self._configs.items():
+            result[role.value] = {
+                "model": config.model,
+                "temperature": config.temperature,
+                "timeout_seconds": config.timeout_seconds,
+                "num_predict": config.num_predict,
+                "num_ctx": config.num_ctx,
+                "response_format": config.response_format,
+                "enabled": config.enabled,
+            }
+
+        return result
 
     @staticmethod
-    def _parse_float(
+    def requires_technical_review(
         *,
-        variable_name: str,
-        raw_value: str,
-        minimum: float,
-        maximum: float,
-    ) -> float:
-        try:
-            value = float(raw_value)
-        except ValueError as exc:
-            raise ValueError(
-                f"{variable_name}은 숫자여야 합니다: "
-                f"{raw_value!r}"
-            ) from exc
+        book_type: str | None = None,
+        chapter_text: str | None = None,
+    ) -> bool:
+        """
+        Technical Reviewer 실행 여부를 판단한다.
 
-        if not minimum <= value <= maximum:
-            raise ValueError(
-                f"{variable_name}은 "
-                f"{minimum} 이상 {maximum} 이하여야 합니다: "
-                f"{value}"
-            )
+        다음 유형의 책이나 챕터일 때만 Technical Reviewer를 사용한다.
 
-        return value
+        - programming
+        - api
+        - system_design
+        - software_engineering
+        - code
+
+        book_type 정보가 없더라도 Markdown 코드 블록이
+        포함되어 있다면 Technical Reviewer를 사용할 수 있다.
+        """
+
+        normalized_book_type = (
+            book_type.strip().lower()
+            if isinstance(book_type, str)
+            else ""
+        )
+
+        technical_types = {
+            "programming",
+            "programming_book",
+            "api",
+            "api_documentation",
+            "system_design",
+            "software_engineering",
+            "developer_guide",
+            "code",
+            "technical",
+            "기술서",
+            "프로그래밍",
+            "시스템 설계",
+            "api 문서",
+        }
+
+        if normalized_book_type in technical_types:
+            return True
+
+        if isinstance(chapter_text, str):
+            if "```" in chapter_text:
+                return True
+
+        return False
+
+    def _build_configs(
+        self,
+    ) -> dict[GenerationRole, RoleModelConfig]:
+        """
+        환경변수를 읽어 전체 역할 설정을 만든다.
+        """
+
+        return {
+            GenerationRole.RESEARCHER: RoleModelConfig(
+                role=GenerationRole.RESEARCHER,
+                model=_read_str_env(
+                    "BOOK_STUDIO_RESEARCHER_MODEL",
+                    "qwen3:32b",
+                ),
+                temperature=_read_float_env(
+                    "BOOK_STUDIO_RESEARCHER_TEMPERATURE",
+                    0.2,
+                ),
+                timeout_seconds=_read_float_env(
+                    "BOOK_STUDIO_RESEARCHER_TIMEOUT_SECONDS",
+                    300.0,
+                ),
+                num_predict=_read_int_env(
+                    "BOOK_STUDIO_RESEARCHER_NUM_PREDICT",
+                    2048,
+                ),
+                num_ctx=_read_int_env(
+                    "BOOK_STUDIO_RESEARCHER_NUM_CTX",
+                    8192,
+                ),
+                response_format="json",
+                enabled=_read_bool_env(
+                    "BOOK_STUDIO_RESEARCHER_ENABLED",
+                    True,
+                ),
+            ),
+
+            GenerationRole.PLANNER: RoleModelConfig(
+                role=GenerationRole.PLANNER,
+                model=_read_str_env(
+                    "BOOK_STUDIO_PLANNER_MODEL",
+                    "qwen3:32b",
+                ),
+                temperature=_read_float_env(
+                    "BOOK_STUDIO_PLANNER_TEMPERATURE",
+                    0.2,
+                ),
+                timeout_seconds=_read_float_env(
+                    "BOOK_STUDIO_PLANNER_TIMEOUT_SECONDS",
+                    300.0,
+                ),
+                num_predict=_read_int_env(
+                    "BOOK_STUDIO_PLANNER_NUM_PREDICT",
+                    2048,
+                ),
+                num_ctx=_read_int_env(
+                    "BOOK_STUDIO_PLANNER_NUM_CTX",
+                    8192,
+                ),
+                response_format="json",
+                enabled=_read_bool_env(
+                    "BOOK_STUDIO_PLANNER_ENABLED",
+                    True,
+                ),
+            ),
+
+            GenerationRole.WRITER: RoleModelConfig(
+                role=GenerationRole.WRITER,
+                model=_read_str_env(
+                    "BOOK_STUDIO_WRITER_MODEL",
+                    "gemma4:31b",
+                ),
+                temperature=_read_float_env(
+                    "BOOK_STUDIO_WRITER_TEMPERATURE",
+                    0.4,
+                ),
+                timeout_seconds=_read_float_env(
+                    "BOOK_STUDIO_WRITER_TIMEOUT_SECONDS",
+                    600.0,
+                ),
+                num_predict=_read_int_env(
+                    "BOOK_STUDIO_WRITER_NUM_PREDICT",
+                    3072,
+                ),
+                num_ctx=_read_int_env(
+                    "BOOK_STUDIO_WRITER_NUM_CTX",
+                    8192,
+                ),
+                response_format="markdown",
+                enabled=_read_bool_env(
+                    "BOOK_STUDIO_WRITER_ENABLED",
+                    True,
+                ),
+            ),
+
+            GenerationRole.REVIEWER: RoleModelConfig(
+                role=GenerationRole.REVIEWER,
+                model=_read_str_env(
+                    "BOOK_STUDIO_REVIEWER_MODEL",
+                    "qwen3:32b",
+                ),
+                temperature=_read_float_env(
+                    "BOOK_STUDIO_REVIEWER_TEMPERATURE",
+                    0.1,
+                ),
+                timeout_seconds=_read_float_env(
+                    "BOOK_STUDIO_REVIEWER_TIMEOUT_SECONDS",
+                    300.0,
+                ),
+                num_predict=_read_int_env(
+                    "BOOK_STUDIO_REVIEWER_NUM_PREDICT",
+                    2048,
+                ),
+                num_ctx=_read_int_env(
+                    "BOOK_STUDIO_REVIEWER_NUM_CTX",
+                    8192,
+                ),
+                response_format="json",
+                enabled=_read_bool_env(
+                    "BOOK_STUDIO_REVIEWER_ENABLED",
+                    True,
+                ),
+            ),
+
+            GenerationRole.TECHNICAL_REVIEWER: RoleModelConfig(
+                role=GenerationRole.TECHNICAL_REVIEWER,
+                model=_read_str_env(
+                    "BOOK_STUDIO_TECHNICAL_REVIEWER_MODEL",
+                    "qwen3-coder:30b",
+                ),
+                temperature=_read_float_env(
+                    "BOOK_STUDIO_TECHNICAL_REVIEWER_TEMPERATURE",
+                    0.1,
+                ),
+                timeout_seconds=_read_float_env(
+                    "BOOK_STUDIO_TECHNICAL_REVIEWER_TIMEOUT_SECONDS",
+                    300.0,
+                ),
+                num_predict=_read_int_env(
+                    "BOOK_STUDIO_TECHNICAL_REVIEWER_NUM_PREDICT",
+                    2048,
+                ),
+                num_ctx=_read_int_env(
+                    "BOOK_STUDIO_TECHNICAL_REVIEWER_NUM_CTX",
+                    8192,
+                ),
+                response_format="json",
+                enabled=_read_bool_env(
+                    "BOOK_STUDIO_TECHNICAL_REVIEWER_ENABLED",
+                    True,
+                ),
+            ),
+
+            GenerationRole.EDITOR: RoleModelConfig(
+                role=GenerationRole.EDITOR,
+                model=_read_str_env(
+                    "BOOK_STUDIO_EDITOR_MODEL",
+                    "qwen3:32b",
+                ),
+                temperature=_read_float_env(
+                    "BOOK_STUDIO_EDITOR_TEMPERATURE",
+                    0.2,
+                ),
+                timeout_seconds=_read_float_env(
+                    "BOOK_STUDIO_EDITOR_TIMEOUT_SECONDS",
+                    300.0,
+                ),
+                num_predict=_read_int_env(
+                    "BOOK_STUDIO_EDITOR_NUM_PREDICT",
+                    2048,
+                ),
+                num_ctx=_read_int_env(
+                    "BOOK_STUDIO_EDITOR_NUM_CTX",
+                    8192,
+                ),
+                response_format="json",
+                enabled=_read_bool_env(
+                    "BOOK_STUDIO_EDITOR_ENABLED",
+                    True,
+                ),
+            ),
+
+            GenerationRole.REVISER: RoleModelConfig(
+                role=GenerationRole.REVISER,
+                model=_read_str_env(
+                    "BOOK_STUDIO_REVISER_MODEL",
+                    "gemma4:31b",
+                ),
+                temperature=_read_float_env(
+                    "BOOK_STUDIO_REVISER_TEMPERATURE",
+                    0.3,
+                ),
+                timeout_seconds=_read_float_env(
+                    "BOOK_STUDIO_REVISER_TIMEOUT_SECONDS",
+                    600.0,
+                ),
+                num_predict=_read_int_env(
+                    "BOOK_STUDIO_REVISER_NUM_PREDICT",
+                    3072,
+                ),
+                num_ctx=_read_int_env(
+                    "BOOK_STUDIO_REVISER_NUM_CTX",
+                    8192,
+                ),
+                response_format="markdown",
+                enabled=_read_bool_env(
+                    "BOOK_STUDIO_REVISER_ENABLED",
+                    True,
+                ),
+            ),
+
+            GenerationRole.READER: RoleModelConfig(
+                role=GenerationRole.READER,
+                model=_read_str_env(
+                    "BOOK_STUDIO_READER_MODEL",
+                    "qwen3:32b",
+                ),
+                temperature=_read_float_env(
+                    "BOOK_STUDIO_READER_TEMPERATURE",
+                    0.3,
+                ),
+                timeout_seconds=_read_float_env(
+                    "BOOK_STUDIO_READER_TIMEOUT_SECONDS",
+                    300.0,
+                ),
+                num_predict=_read_int_env(
+                    "BOOK_STUDIO_READER_NUM_PREDICT",
+                    2048,
+                ),
+                num_ctx=_read_int_env(
+                    "BOOK_STUDIO_READER_NUM_CTX",
+                    8192,
+                ),
+                response_format="json",
+                enabled=_read_bool_env(
+                    "BOOK_STUDIO_READER_ENABLED",
+                    True,
+                ),
+            ),
+        }
+
+
+def _read_str_env(
+    name: str,
+    fallback: str,
+) -> str:
+    value = os.getenv(name)
+
+    if value is None:
+        return fallback
+
+    normalized = value.strip()
+
+    return normalized or fallback
+
+
+def _read_int_env(
+    name: str,
+    fallback: int,
+) -> int:
+    value = os.getenv(name)
+
+    if value is None or not value.strip():
+        return fallback
+
+    try:
+        parsed = int(value)
+    except ValueError as exc:
+        raise ValueError(
+            f"{name}은 정수여야 합니다. "
+            f"actual={value!r}"
+        ) from exc
+
+    if parsed <= 0:
+        raise ValueError(
+            f"{name}은 0보다 커야 합니다. "
+            f"actual={parsed}"
+        )
+
+    return parsed
+
+
+def _read_float_env(
+    name: str,
+    fallback: float,
+) -> float:
+    value = os.getenv(name)
+
+    if value is None or not value.strip():
+        return fallback
+
+    try:
+        parsed = float(value)
+    except ValueError as exc:
+        raise ValueError(
+            f"{name}은 숫자여야 합니다. "
+            f"actual={value!r}"
+        ) from exc
+
+    if parsed < 0:
+        raise ValueError(
+            f"{name}은 0 이상이어야 합니다. "
+            f"actual={parsed}"
+        )
+
+    return parsed
+
+
+def _read_bool_env(
+    name: str,
+    fallback: bool,
+) -> bool:
+    value = os.getenv(name)
+
+    if value is None or not value.strip():
+        return fallback
+
+    normalized = value.strip().lower()
+
+    if normalized in {
+        "1",
+        "true",
+        "yes",
+        "on",
+        "enabled",
+    }:
+        return True
+
+    if normalized in {
+        "0",
+        "false",
+        "no",
+        "off",
+        "disabled",
+    }:
+        return False
+
+    raise ValueError(
+        f"{name}은 boolean 값이어야 합니다. "
+        f"actual={value!r}"
+    )

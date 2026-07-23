@@ -55,10 +55,15 @@ class WriterAgent(BasePublishingAgent):
         research = parse_artifact_content(research_artifact)
 
         payload = await self.llm_service.write_chapter(
-            plan=plan,
+            chapter_plan=plan,
             research=research,
-            target_reader=context.book.target_reader,
-            writing_style=None,
+            book_context={
+                "title": context.book.title,
+                "description": context.book.description,
+                "target_reader": context.book.target_reader,
+                "goal": context.book.purpose,
+                "language": context.book.language,
+            },
         )
 
         payload["based_on_plan"] = plan_artifact.artifact_id

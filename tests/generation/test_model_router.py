@@ -8,37 +8,36 @@ from backend.generation.model_router import (
 )
 
 
-def test_model_router_uses_common_default(
+def test_model_router_uses_role_specific_defaults(
     monkeypatch: pytest.MonkeyPatch,
 ):
-    monkeypatch.setenv(
-        "BOOK_STUDIO_MODEL",
-        "common-model",
-    )
-
     monkeypatch.delenv(
         "BOOK_STUDIO_WRITER_MODEL",
+        raising=False,
+    )
+    monkeypatch.delenv(
+        "BOOK_STUDIO_RESEARCHER_MODEL",
         raising=False,
     )
 
     router = ModelRouter()
 
-    config = router.get_config(
+    writer = router.get_config(
         GenerationRole.WRITER
     )
+    researcher = router.get_config(
+        GenerationRole.RESEARCHER
+    )
 
-    assert config.model == "common-model"
-    assert config.role == GenerationRole.WRITER
+    assert writer.model == "gemma4:31b"
+    assert writer.response_format == "markdown"
+    assert researcher.model == "qwen3:32b"
+    assert researcher.response_format == "json"
 
 
 def test_model_router_uses_role_specific_model(
     monkeypatch: pytest.MonkeyPatch,
 ):
-    monkeypatch.setenv(
-        "BOOK_STUDIO_MODEL",
-        "common-model",
-    )
-
     monkeypatch.setenv(
         "BOOK_STUDIO_REVIEWER_MODEL",
         "reviewer-model",
@@ -57,11 +56,6 @@ def test_model_router_uses_role_temperature(
     monkeypatch: pytest.MonkeyPatch,
 ):
     monkeypatch.setenv(
-        "BOOK_STUDIO_TEMPERATURE",
-        "0.3",
-    )
-
-    monkeypatch.setenv(
         "BOOK_STUDIO_WRITER_TEMPERATURE",
         "0.7",
     )
@@ -75,15 +69,15 @@ def test_model_router_uses_role_temperature(
     assert config.temperature == 0.7
 
 
-def test_model_router_rejects_unknown_role():
+def test_model_router_rejects_unknown_role_type():
     router = ModelRouter()
 
     with pytest.raises(
-        ValueError,
-        match="지원하지 않는 Generation 역할",
+        TypeError,
+        match="GenerationRole",
     ):
         router.get_config(
-            "unknown-role"
+            "unknown-role"  # type: ignore[arg-type]
         )
 
 
@@ -95,12 +89,25 @@ def test_model_router_rejects_invalid_temperature(
         "not-number",
     )
 
-    router = ModelRouter()
-
     with pytest.raises(
         ValueError,
         match="숫자여야 합니다",
     ):
-        router.get_config(
-            GenerationRole.REVIEWER
-        )
+        ModelRouter()
+
+
+def test_requires_technical_review_for_code_block():
+    router = ModelRouter()
+
+    assert router.requires_technical_review(
+        book_type="programming"
+    ) is True
+
+    assert router.requires_technical_review(
+        book_type="novel"
+    ) is False
+
+    assert router.requires_technical_review(
+        book_type="education",
+        chapter_text="```python\nprint(1)\n```",
+    ) is True

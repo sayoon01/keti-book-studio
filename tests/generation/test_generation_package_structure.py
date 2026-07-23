@@ -47,7 +47,7 @@ def test_ollama_client_moved_to_infrastructure():
         / "backend"
         / "infrastructure"
         / "llm"
-        / "ollama_json_client.py"
+        / "ollama_client.py"
     )
 
     assert path.exists()

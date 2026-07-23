@@ -1,23 +1,29 @@
-"""LLM 공급자 및 클라이언트 구현."""
-
-from backend.infrastructure.llm.ollama_json_client import (
+from backend.infrastructure.llm.exceptions import (
     OllamaClientError,
-    OllamaError,
     OllamaIncompleteResponseError,
-    OllamaJsonClient,
     OllamaLowQualityResponseError,
     OllamaModelNotFoundError,
     OllamaResponseParseError,
+)
+from backend.infrastructure.llm.models import (
+    OllamaGenerationMetadata,
+    OllamaJsonResult,
     OllamaSettings,
+    OllamaTextResult,
+)
+from backend.infrastructure.llm.ollama_client import (
+    OllamaClient,
 )
 
 __all__ = [
+    "OllamaClient",
     "OllamaClientError",
-    "OllamaError",
+    "OllamaGenerationMetadata",
     "OllamaIncompleteResponseError",
-    "OllamaJsonClient",
+    "OllamaJsonResult",
     "OllamaLowQualityResponseError",
     "OllamaModelNotFoundError",
     "OllamaResponseParseError",
     "OllamaSettings",
+    "OllamaTextResult",
 ]

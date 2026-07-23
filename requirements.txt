@@ -12,4 +12,5 @@ openpyxl
 pypdf
 python-multipart
 python-docx
+python-dotenv
 xhtml2pdf
